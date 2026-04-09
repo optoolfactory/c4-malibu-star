@@ -30,4 +30,3 @@ export STAGING_ROOT="/data/safe_staging"
 if [ -x /data/openpilot/starpilot/system/environment_variables ]; then
   eval "$(/data/openpilot/starpilot/system/environment_variables)"
 fi
-export FINGERPRINT="CHEVROLET_MALIBU_ASCM"
