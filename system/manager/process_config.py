@@ -132,6 +132,9 @@ procs = [
   PythonProcess("webrtcd", "system.webrtc.webrtcd", notcar),
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
+
+  # c3x lite
+  PythonProcess("beep", "selfdrive.controls.beep", always_run),  
 ]
 
 # StarPilot variables
