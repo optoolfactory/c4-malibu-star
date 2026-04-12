@@ -29,6 +29,8 @@ MM_MODEM = MM + ".Modem"
 MM_MODEM_SIMPLE = MM + ".Modem.Simple"
 MM_SIM = MM + ".Sim"
 
+LITE = os.getenv("LITE") is not None
+
 class MM_MODEM_STATE(IntEnum):
   FAILED        = -1
   UNKNOWN       = 0
@@ -94,7 +96,7 @@ class Tici(HardwareBase):
 
   @cached_property
   def amplifier(self):
-    if self.get_device_type() == "mici":
+    if self.get_device_type() == "mici" or LITE:
       return None
     return Amplifier()
 
@@ -210,7 +212,7 @@ class Tici(HardwareBase):
     return str(self.get_modem().Get(MM_MODEM, 'EquipmentIdentifier', dbus_interface=DBUS_PROPS, timeout=TIMEOUT))
 
   def get_network_info(self):
-    if self.get_device_type() == "mici":
+    if self.get_device_type() == "mici" or LITE:
       return None
     try:
       modem = self.get_modem()
@@ -302,6 +304,8 @@ class Tici(HardwareBase):
       return None
 
   def get_modem_temperatures(self):
+    if LITE:
+      return []
     timeout = 0.2  # Default timeout is too short
     try:
       modem = self.get_modem()
