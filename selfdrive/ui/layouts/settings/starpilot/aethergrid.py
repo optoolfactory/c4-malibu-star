@@ -6,6 +6,7 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget, DialogResult
+from openpilot.selfdrive.ui.layouts.settings.starpilot.asset_loader import starpilot_texture
 
 
 GEOMETRY_OFFSET = 10
@@ -14,6 +15,23 @@ TILE_RADIUS = 0.25
 TILE_SEGMENTS = 10
 TILE_PADDING = 20
 SLIDER_BUTTON_SIZE = 60
+
+
+class SPACING:
+  xs: int = 4
+  sm: int = 8
+  md: int = 12
+  lg: int = 16
+  xl: int = 24
+  xxl: int = 32
+  xxxl: int = 48
+
+  tile_gap: int = 16
+  tile_content: int = 16
+  line_gap: int = 8
+  section_gap: int = 24
+  tab_height: int = 96
+  tab_panel_gap: int = 16
 
 
 def hex_to_color(hex_str: str) -> rl.Color:
@@ -141,7 +159,7 @@ class AetherTile(Widget):
     rl.draw_text_ex(font, text, rl.Vector2(round(draw_x), round(pos.y + nudge_y)), actual_font_size, spacing, rl.WHITE)
 
   def _centered_content(self, face: rl.Rectangle, icon: rl.Texture2D | None, icon_scale: float, title_font_size: float, text_lines: int, line_heights: list[float]):
-    line_spacing = 8
+    line_spacing = SPACING.line_gap
     total_h = sum(line_heights) + line_spacing * (text_lines - 1)
     icon_w = icon.width * icon_scale if icon else 0
     icon_h = icon.height * icon_scale if icon else 0
@@ -181,15 +199,16 @@ class AetherTile(Widget):
 
 
 class HubTile(AetherTile):
-  def __init__(self, title: str, desc: str, icon_path: str, on_click: Callable | None = None, starpilot_icon: bool = False, bg_color: rl.Color | str | None = None):
+  def __init__(self, title: str, desc: str, icon_path: str, on_click: Callable | None = None, starpilot_icon: bool = False, bg_color: rl.Color | str | None = None, get_status: Callable[[], str] | None = None):
     if bg_color:
       super().__init__(surface_color=bg_color, on_click=on_click)
     else:
       super().__init__(on_click=on_click)
+    self.get_status = get_status
     self.title = title
     self.desc = desc
     if icon_path:
-      if starpilot_icon: self._icon = gui_app.starpilot_texture(icon_path, 100, 100)
+      if starpilot_icon: self._icon = starpilot_texture(icon_path, 100, 100)
       else: self._icon = gui_app.texture(icon_path, 100, 100)
     else: self._icon = None
     self._font_title = gui_app.font(FontWeight.BOLD)
@@ -197,20 +216,33 @@ class HubTile(AetherTile):
 
   def _render(self, rect: rl.Rectangle):
     face = self._render_layers(rect)
-    max_w = face.width - 40
+    
+    status_text = self.get_status() if self.get_status else ""
+    if status_text:
+      import re
+      m = re.search(r'(\d+)%$', status_text)
+      if m:
+        ratio = min(1.0, max(0.0, float(m.group(1)) / 100.0))
+        if ratio > 0.05:
+            fill_rect = rl.Rectangle(face.x, face.y, face.width * ratio, face.height)
+            rl.draw_rectangle_rounded(fill_rect, TILE_RADIUS, 10, rl.Color(255, 255, 255, 40))
+
+    content_pad = SPACING.tile_content
+    max_w = face.width - (content_pad * 2)
     lines = self._wrap_text(self._font_title, self.title, max_w, 30)
     line_heights = [30] * len(lines)
     _, ty = self._centered_content(face, self._icon, 0.75, 30, len(line_heights), line_heights)
     line_h = 30
-    line_spacing = 8
+    line_spacing = SPACING.line_gap
     for i, line in enumerate(lines):
-      self._draw_text_fit(self._font_title, line, rl.Vector2(face.x + 20, ty + i * (line_h + line_spacing)), max_w, line_h, align_center=True)
+      self._draw_text_fit(self._font_title, line, rl.Vector2(face.x + content_pad, ty + i * (line_h + line_spacing)), max_w, line_h, align_center=True)
 
-    if self.desc:
-      desc_lines = self._wrap_text(self._font_desc, self.desc, max_w, 18, max_lines=3)
-      desc_y = ty + len(lines) * (line_h + line_spacing) + 18
+    desc_to_render = status_text if status_text else self.desc
+    if desc_to_render:
+      desc_lines = self._wrap_text(self._font_desc, desc_to_render, max_w, 18, max_lines=3)
+      desc_y = ty + len(lines) * (line_h + line_spacing) + SPACING.lg
       for i, line in enumerate(desc_lines):
-        self._draw_text_fit(self._font_desc, line, rl.Vector2(face.x + 20, desc_y + i * 20), max_w, 18, align_center=True)
+        self._draw_text_fit(self._font_desc, line, rl.Vector2(face.x + content_pad, desc_y + i * 20), max_w, 18, align_center=True)
 
 
 class ToggleTile(AetherTile):
@@ -223,7 +255,7 @@ class ToggleTile(AetherTile):
     self.get_state = get_state
     self.set_state = set_state
     self.set_enabled(is_enabled or True)
-    self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
+    self._icon = starpilot_texture(icon_path, 80, 80) if icon_path else None
     self._font = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
     self._active_color = self.surface_color
@@ -250,16 +282,17 @@ class ToggleTile(AetherTile):
     face = self._render_layers(rect)
     line_heights = [28, 30]
     _, ty = self._centered_content(face, self._icon, 0.75, 28, len(line_heights), line_heights)
-    max_w = face.width - 40
-    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
+    content_pad = SPACING.tile_content
+    max_w = face.width - (content_pad * 2)
+    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + content_pad, ty), max_w, 28, align_center=True, uppercase=True)
     if enabled:
       state_text = tr("ON") if active else tr("OFF")
     else:
       state_text = tr(self._disabled_label) if self._disabled_label else tr("LOCKED")
-    self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 30, align_center=True, uppercase=True)
+    self._draw_text_fit(self._font, state_text, rl.Vector2(face.x + content_pad, ty + 28 + SPACING.line_gap), max_w, 30, align_center=True, uppercase=True)
 
     if self.desc:
-      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + 20, ty + 28 + 8 + 34), max_w, 18, align_center=True)
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + content_pad, ty + 28 + SPACING.line_gap + 34), max_w, 18, align_center=True)
 
 
 class ValueTile(AetherTile):
@@ -270,7 +303,7 @@ class ValueTile(AetherTile):
     self.desc = desc
     self.get_value = get_value
     self._enabled = is_enabled or (lambda: True)
-    self._icon = gui_app.starpilot_texture(icon_path, 80, 80) if icon_path else None
+    self._icon = starpilot_texture(icon_path, 80, 80) if icon_path else None
     self._font = gui_app.font(FontWeight.BOLD)
     self._font_desc = gui_app.font(FontWeight.NORMAL)
     self._active_color = self.surface_color
@@ -285,13 +318,14 @@ class ValueTile(AetherTile):
     face = self._render_layers(rect)
     line_heights = [28, 28]
     _, ty = self._centered_content(face, self._icon, 0.75, 28, len(line_heights), line_heights)
-    max_w = face.width - 40
-    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + 20, ty), max_w, 28, align_center=True, uppercase=True)
+    content_pad = SPACING.tile_content
+    max_w = face.width - (content_pad * 2)
+    self._draw_text_fit(self._font, self.title, rl.Vector2(face.x + content_pad, ty), max_w, 28, align_center=True, uppercase=True)
     val_text = self.get_value()
-    self._draw_text_fit(self._font, val_text, rl.Vector2(face.x + 20, ty + 28 + 8), max_w, 28, align_center=True, uppercase=True)
+    self._draw_text_fit(self._font, val_text, rl.Vector2(face.x + content_pad, ty + 28 + SPACING.line_gap), max_w, 28, align_center=True, uppercase=True)
 
     if self.desc:
-      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + 20, ty + 28 + 8 + 34), max_w, 18, align_center=True)
+      self._draw_text_fit(self._font_desc, self.desc, rl.Vector2(face.x + content_pad, ty + 28 + SPACING.line_gap + 34), max_w, 18, align_center=True)
 
 
 class AetherSlider(Widget):
@@ -472,14 +506,14 @@ class AetherSliderDialog(Widget):
     if self._is_pressed_ok:
       self._ok_target = 0.0
       if rl.check_collision_point_rec(mouse_pos, self._ok_rect):
+        gui_app.pop_widget()
         self._user_callback(DialogResult.CONFIRM, self._current_val)
-        gui_app.set_modal_overlay(None)
       self._is_pressed_ok = False
     if self._is_pressed_cancel:
       self._cancel_target = 0.0
       if rl.check_collision_point_rec(mouse_pos, self._cancel_rect):
+        gui_app.pop_widget()
         self._user_callback(DialogResult.CANCEL, self._current_val)
-        gui_app.set_modal_overlay(None)
       self._is_pressed_cancel = False
 
   def _render(self, rect: rl.Rectangle):
@@ -488,38 +522,41 @@ class AetherSliderDialog(Widget):
     self._cancel_offset += (self._cancel_target - self._cancel_offset) * (1 - math.exp(-dt / PLATE_TAU))
     rl.draw_rectangle(0, 0, gui_app.width, gui_app.height, rl.Color(0, 0, 0, 160))
     dialog_w, dialog_h = 1000, 500
+    dialog_margin = SPACING.xxl
+    button_height = 80
+    button_width = 350
     dx, dy = rect.x + (rect.width - dialog_w) / 2, rect.y + (rect.height - dialog_h) / 2
-    self._ok_rect = rl.Rectangle(dx + dialog_w - 450, dy + dialog_h - 120, 350, 80)
-    self._cancel_rect = rl.Rectangle(dx + 100, dy + dialog_h - 120, 350, 80)
+    self._ok_rect = rl.Rectangle(dx + dialog_w - button_width - SPACING.lg, dy + dialog_h - button_height - SPACING.lg, button_width, button_height)
+    self._cancel_rect = rl.Rectangle(dx + SPACING.lg, dy + dialog_h - button_height - SPACING.lg, button_width, button_height)
     d_rect = rl.Rectangle(dx, dy, dialog_w, dialog_h)
     rl.draw_rectangle_rounded(d_rect, 0.05, 10, rl.Color(30, 30, 30, 255))
     rl.draw_rectangle_rounded_lines_ex(d_rect, 0.05, 10, 2, self._color)
     ts = measure_text_cached(self._font_title, self.title, 50)
-    rl.draw_text_ex(self._font_title, self.title, rl.Vector2(round(dx + (dialog_w - ts.x) / 2), round(dy + 40)), 50, 0, rl.WHITE)
-    slider_rect = rl.Rectangle(dx + 100, dy + 200, dialog_w - 200, 100)
+    rl.draw_text_ex(self._font_title, self.title, rl.Vector2(round(dx + (dialog_w - ts.x) / 2), round(dy + SPACING.xxl)), 50, 0, rl.WHITE)
+    slider_rect = rl.Rectangle(dx + SPACING.xxl, dy + 200, dialog_w - (SPACING.xxl * 2), 100)
     self._slider.render(slider_rect)
     c_shadow_alpha = int(255 * (1.0 - 0.9 * self._cancel_offset))
-    rl.draw_rectangle_rounded(rl.Rectangle(self._cancel_rect.x + GEOMETRY_OFFSET, self._cancel_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(30, 30, 30, c_shadow_alpha))
+    rl.draw_rectangle_rounded(rl.Rectangle(self._cancel_rect.x + GEOMETRY_OFFSET, self._cancel_rect.y + GEOMETRY_OFFSET, button_width, button_height), 0.2, 10, rl.Color(30, 30, 30, c_shadow_alpha))
     c_face_x = self._cancel_rect.x + GEOMETRY_OFFSET * self._cancel_offset
     c_face_y = self._cancel_rect.y + GEOMETRY_OFFSET * self._cancel_offset
-    c_face = rl.Rectangle(c_face_x, c_face_y, 350, 80)
+    c_face = rl.Rectangle(c_face_x, c_face_y, button_width, button_height)
     rl.draw_rectangle_rounded(c_face, 0.2, 10, rl.Color(80, 80, 80, 255))
     rl.draw_rectangle_rounded(rl.Rectangle(c_face.x + 1, c_face.y + 1, c_face.width - 2, c_face.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
     rl.draw_rectangle_rounded(rl.Rectangle(c_face.x, c_face.y, c_face.width - 1.5, c_face.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     cts = measure_text_cached(self._font_btn, tr("CANCEL"), 35)
-    cancel_text_pos = rl.Vector2(c_face_x + (350 - cts.x) / 2, c_face_y + (80 - cts.y) / 2)
+    cancel_text_pos = rl.Vector2(c_face_x + (button_width - cts.x) / 2, c_face_y + (button_height - cts.y) / 2)
     rl.draw_text_ex(self._font_btn, tr("CANCEL"), rl.Vector2(round(cancel_text_pos.x + 1), round(cancel_text_pos.y + 2)), 35, 0, rl.Color(0, 0, 0, 90))
     rl.draw_text_ex(self._font_btn, tr("CANCEL"), rl.Vector2(round(cancel_text_pos.x), round(cancel_text_pos.y)), 35, 0, rl.WHITE)
     o_shadow_alpha = int(255 * (1.0 - 0.9 * self._ok_offset))
-    rl.draw_rectangle_rounded(rl.Rectangle(self._ok_rect.x + GEOMETRY_OFFSET, self._ok_rect.y + GEOMETRY_OFFSET, 350, 80), 0.2, 10, rl.Color(self._color.r, self._color.g, self._color.b, int(o_shadow_alpha * 0.4)))
+    rl.draw_rectangle_rounded(rl.Rectangle(self._ok_rect.x + GEOMETRY_OFFSET, self._ok_rect.y + GEOMETRY_OFFSET, button_width, button_height), 0.2, 10, rl.Color(self._color.r, self._color.g, self._color.b, int(o_shadow_alpha * 0.4)))
     o_face_x = self._ok_rect.x + GEOMETRY_OFFSET * self._ok_offset
     o_face_y = self._ok_rect.y + GEOMETRY_OFFSET * self._ok_offset
-    o_face = rl.Rectangle(o_face_x, o_face_y, 350, 80)
+    o_face = rl.Rectangle(o_face_x, o_face_y, button_width, button_height)
     rl.draw_rectangle_rounded(o_face, 0.2, 10, self._color)
     rl.draw_rectangle_rounded(rl.Rectangle(o_face.x + 1, o_face.y + 1, o_face.width - 2, o_face.height - 2), 0.2, 10, rl.Color(0, 0, 0, 80))
     rl.draw_rectangle_rounded(rl.Rectangle(o_face.x, o_face.y, o_face.width - 1.5, o_face.height - 1.5), 0.2, 10, rl.Color(255, 255, 255, 110))
     ots = measure_text_cached(self._font_btn, tr("OK"), 35)
-    ok_text_pos = rl.Vector2(o_face_x + (350 - ots.x) / 2, o_face_y + (80 - ots.y) / 2)
+    ok_text_pos = rl.Vector2(o_face_x + (button_width - ots.x) / 2, o_face_y + (button_height - ots.y) / 2)
     rl.draw_text_ex(self._font_btn, tr("OK"), rl.Vector2(round(ok_text_pos.x + 1), round(ok_text_pos.y + 2)), 35, 0, rl.Color(0, 0, 0, 90))
     rl.draw_text_ex(self._font_btn, tr("OK"), rl.Vector2(round(ok_text_pos.x), round(ok_text_pos.y)), 35, 0, rl.WHITE)
     return DialogResult.NO_ACTION
@@ -568,9 +605,9 @@ class RadioTileGroup(Widget):
       self._option_targets.append(0.0)
     for i in range(len(self._option_offsets)):
       self._option_offsets[i] += (self._option_targets[i] - self._option_offsets[i]) * (1 - math.exp(-dt / PLATE_TAU))
-    padding = 16
+    gap = SPACING.lg
     option_w = 240 if len(self.options) <= 3 else 188
-    total_width = len(self.options) * option_w + max(0, len(self.options) - 1) * padding
+    total_width = len(self.options) * option_w + max(0, len(self.options) - 1) * gap
     if self.title:
       title_size = measure_text_cached(self._font_title, self.title, 40)
       rl.draw_text_ex(self._font_title, self.title, rl.Vector2(round(rect.x), round(rect.y + (rect.height - title_size.y) / 2)), 40, 0, rl.WHITE)
@@ -578,7 +615,7 @@ class RadioTileGroup(Widget):
     else:
       start_x = rect.x + (rect.width - total_width) / 2
     for i, opt in enumerate(self.options):
-      r = rl.Rectangle(start_x + i * (option_w + padding), rect.y, option_w, rect.height)
+      r = rl.Rectangle(start_x + i * (option_w + gap), rect.y, option_w, rect.height)
       self._option_rects.append(r)
       is_active = i == self.current_index
       color = self._active_color if is_active else self._inactive_color
@@ -593,7 +630,7 @@ class RadioTileGroup(Widget):
       rl.draw_rectangle_rounded(rl.Rectangle(face_rect.x, face_rect.y, face_rect.width - 1.5, face_rect.height - 1.5), TILE_RADIUS, 10, rl.Color(255, 255, 255, 110))
       font_size = 30
       spacing = round(font_size * 0.08)
-      max_width = r.width - 28
+      max_width = r.width - (SPACING.lg + SPACING.xs)
       ts = measure_text_cached(self._font, opt, font_size, spacing=spacing)
       while font_size > 22 and ts.x > max_width:
         font_size -= 1
@@ -605,14 +642,44 @@ class RadioTileGroup(Widget):
 
 
 class TileGrid(Widget):
-  def __init__(self, columns: int | None = None, padding: int = 20, uniform_width: bool = False):
+  def __init__(self, columns: int | None = None, padding: int | None = None, uniform_width: bool = False):
     super().__init__()
-    self._columns, self.padding, self.tiles = columns, padding, []
+    self._columns = columns
+    self._gap = padding if padding is not None else SPACING.tile_gap
+    self.tiles = []
     self._uniform_width = uniform_width
+
+  @property
+  def gap(self) -> int:
+    return self._gap
 
   def add_tile(self, tile: Widget): self.tiles.append(tile)
 
   def clear(self): self.tiles.clear()
+
+  def get_column_count(self, tile_count: int | None = None) -> int:
+    count = len(self.tiles) if tile_count is None else tile_count
+    if count <= 0:
+      return self._columns or 1
+    if self._columns is not None:
+      return self._columns
+    if count == 1: return 1
+    if count == 2: return 2
+    if count == 3: return 3
+    if count == 4: return 2
+    if count <= 6: return 3
+    return 4
+
+  def get_row_count(self, tile_count: int | None = None) -> int:
+    count = len(self.tiles) if tile_count is None else tile_count
+    if count <= 0:
+      return 0
+    cols = self.get_column_count(count)
+    return (count + cols - 1) // cols
+
+  def get_internal_gap_height(self, tile_count: int | None = None) -> float:
+    rows = self.get_row_count(tile_count)
+    return self._gap * max(0, rows - 1)
 
   def _render(self, rect: rl.Rectangle):
     self.set_rect(rect)
@@ -620,18 +687,10 @@ class TileGrid(Widget):
       return
     tiles_to_render = list(self.tiles)
     count = len(tiles_to_render)
-    if self._columns is not None:
-      cols = self._columns
-    else:
-      if count == 1: cols = 1
-      elif count == 2: cols = 2
-      elif count == 3: cols = 3
-      elif count == 4: cols = 2
-      elif count <= 6: cols = 3
-      else: cols = 4
-    rows = (count + cols - 1) // cols
-    tile_h = (rect.height - (self.padding * (rows - 1))) / rows
-    uniform_tile_w = (rect.width - (self.padding * (cols - 1))) / cols if self._uniform_width else 0
+    cols = self.get_column_count(count)
+    rows = self.get_row_count(count)
+    tile_h = (rect.height - (self._gap * (rows - 1))) / rows
+    uniform_tile_w = (rect.width - (self._gap * (cols - 1))) / cols if self._uniform_width else 0
     tile_idx = 0
     for r in range(rows):
       remaining = count - tile_idx
@@ -639,12 +698,12 @@ class TileGrid(Widget):
       items_in_row = min(cols, remaining)
       if self._uniform_width:
         row_tile_w = uniform_tile_w
-        row_width = (row_tile_w * items_in_row) + (self.padding * (items_in_row - 1))
+        row_width = (row_tile_w * items_in_row) + (self._gap * (items_in_row - 1))
         row_x = rect.x + (rect.width - row_width) / 2
       else:
-        row_tile_w = (rect.width - (self.padding * (items_in_row - 1))) / items_in_row
+        row_tile_w = (rect.width - (self._gap * (items_in_row - 1))) / items_in_row
         row_x = rect.x
       for c in range(items_in_row):
         tile = tiles_to_render[tile_idx]
-        tile.render(rl.Rectangle(row_x + c * (row_tile_w + self.padding), rect.y + r * (tile_h + self.padding), row_tile_w, tile_h))
+        tile.render(rl.Rectangle(row_x + c * (row_tile_w + self._gap), rect.y + r * (tile_h + self._gap), row_tile_w, tile_h))
         tile_idx += 1

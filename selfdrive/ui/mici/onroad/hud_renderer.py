@@ -213,7 +213,8 @@ class HudRenderer(Widget):
           primary_priority=primary_priority,
           secondary_priority=secondary_priority,
         )
-        self._speed_limit = max(0.0, resolved_speed_limit * speed_conversion)
+        display_speed_limit = starpilot_plan.slcOverriddenSpeed if starpilot_plan.slcOverriddenSpeed > 0 else resolved_speed_limit
+        self._speed_limit = max(0.0, display_speed_limit * speed_conversion)
         self._speed_limit_offset = starpilot_plan.slcSpeedLimitOffset * speed_conversion
         self._speed_limit_overridden = bool(starpilot_plan.slcOverriddenSpeed > 0 and starpilot_plan.slcSpeedLimit > 0)
         if self._speed_limit > 0 and not self._speed_limit_overridden and not self._show_speed_limit_offset:
@@ -264,12 +265,13 @@ class HudRenderer(Widget):
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
     wheel_txt = self._txt_wheel_critical if self._show_wheel_critical else self._txt_wheel
+    lateral_ui_active = ui_state.status == UIStatus.ENGAGED or ui_state.always_on_lateral_active
 
     if self._show_wheel_critical:
       self._wheel_alpha_filter.update(255)
       self._wheel_y_filter.update(0)
     else:
-      if ui_state.status == UIStatus.DISENGAGED:
+      if not lateral_ui_active and ui_state.status == UIStatus.DISENGAGED:
         self._wheel_alpha_filter.update(0)
         self._wheel_y_filter.update(wheel_txt.height / 2)
       else:

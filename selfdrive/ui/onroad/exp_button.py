@@ -4,6 +4,11 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget
+from openpilot.starpilot.common.experimental_state import (
+  CEStatus,
+  next_manual_ce_status,
+  sync_manual_ce_state,
+)
 
 
 class ExpButton(Widget):
@@ -35,12 +40,20 @@ class ExpButton(Widget):
   def _handle_mouse_release(self, _):
     super()._handle_mouse_release(_)
     if self._is_toggle_allowed():
-      new_mode = not self._experimental_mode
-      self._params.put_bool("ExperimentalMode", new_mode)
+      if self._params.get_bool("ConditionalExperimental"):
+        current_status = ui_state.params_memory.get_int("CEStatus", default=CEStatus["OFF"])
+        override_value = next_manual_ce_status(current_status, self._experimental_mode)
+        ui_state.params_memory.put_int("CEStatus", override_value)
+        sync_manual_ce_state(self._params, override_value)
+        self._held_mode = None
+        self._hold_end_time = None
+      else:
+        new_mode = not self._experimental_mode
+        self._params.put_bool("ExperimentalMode", new_mode)
 
-      # Hold new state temporarily
-      self._held_mode = new_mode
-      self._hold_end_time = time.monotonic() + self._hold_duration
+        # Hold new state temporarily
+        self._held_mode = new_mode
+        self._hold_end_time = time.monotonic() + self._hold_duration
 
   def _render(self, rect: rl.Rectangle) -> None:
     center_x = int(self._rect.x + self._rect.width // 2)
@@ -50,7 +63,7 @@ class ExpButton(Widget):
 
     texture = self._txt_exp if self._held_or_actual_mode() else self._txt_wheel
     rl.draw_circle(center_x, center_y, self._rect.width / 2, self._black_bg)
-    rl.draw_texture(texture, center_x - texture.width // 2, center_y - texture.height // 2, self._white_color)
+    rl.draw_texture_ex(texture, rl.Vector2(center_x - texture.width / 2, center_y - texture.height / 2), 0.0, 1.0, self._white_color)
 
   def _held_or_actual_mode(self):
     now = time.monotonic()

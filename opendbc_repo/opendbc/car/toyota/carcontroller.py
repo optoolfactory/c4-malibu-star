@@ -24,6 +24,7 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 ACCEL_WINDUP_LIMIT = 4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_WINDDOWN_LIMIT = -4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_PID_UNWIND = 0.03 * DT_CTRL * 3  # m/s^2 / frame
+PRIUS_INTEGRAL_MISMATCH_UNWIND = 4.0
 
 MAX_PITCH_COMPENSATION = 1.5  # m/s^2
 
@@ -48,7 +49,7 @@ def get_long_tune(CP, params):
   k_f = 1.0
 
   if CP.carFingerprint == CAR.TOYOTA_PRIUS:
-    k_f = 0.0
+    k_f = 0.7
   elif CP.carFingerprint not in TSS2_CAR:
     kiBP = [0., 5., 35.]
     kiV = [3.6, 2.4, 1.5]
@@ -250,7 +251,10 @@ class CarController(CarControllerBase):
 
         if CC.longActive:
           # constantly slowly unwind integral to recover from large temporary errors
-          self.long_pid.i -= ACCEL_PID_UNWIND * float(np.sign(self.long_pid.i))
+          unwind_rate = ACCEL_PID_UNWIND
+          if self.CP.carFingerprint == CAR.TOYOTA_PRIUS and pcm_accel_cmd * self.long_pid.i < 0.0:
+            unwind_rate *= PRIUS_INTEGRAL_MISMATCH_UNWIND
+          self.long_pid.i -= unwind_rate * float(np.sign(self.long_pid.i))
 
           error_future = pcm_accel_cmd - a_ego_future
 
@@ -261,9 +265,14 @@ class CarController(CarControllerBase):
                                                -MAX_PITCH_COMPENSATION, MAX_PITCH_COMPENSATION))
             pcm_accel_cmd += pitch_compensation
 
+          feedforward = pcm_accel_cmd
+          if self.CP.carFingerprint == CAR.TOYOTA_PRIUS:
+            # Preserve the smoother positive handoff, but let braking feedforward pull speed back down.
+            feedforward = min(feedforward, 0.0)
+
           pcm_accel_cmd = self.long_pid.update(error_future,
                                                speed=CS.out.vEgo,
-                                               feedforward=pcm_accel_cmd,
+                                               feedforward=feedforward,
                                                freeze_integrator=actuators.longControlState != LongCtrlState.pid)
         else:
           self.long_pid.reset()

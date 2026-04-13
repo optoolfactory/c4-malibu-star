@@ -237,6 +237,7 @@ class TestGmSdgmSafety(TestGmSafetyBase):
   TX_MSGS = [[0x180, 0], [0x370, 0], [0x200, 0], [0x1E1, 0], [0x3D1, 0], [0xBD, 0], [0x1F5, 0],  # pt bus
              [0x1E1, 2], [0x184, 2]]  # camera bus
   FWD_BLACKLISTED_ADDRS = {2: [0x180], 0: [0x184]}  # block LKAS message and PSCMStatus
+  RELAY_MALFUNCTION_ADDRS = {0: (0x180,), 2: ()}
   BUTTONS_BUS = 2  # tx only
 
   def setUp(self):
@@ -390,14 +391,18 @@ class TestGmInterceptorSafety(common.GasInterceptorSafetyTest, TestGmCameraSafet
       self.assertEqual(enable, self.safety.get_controls_allowed())
 
   def test_buttons(self):
-    # Pedal-long non-ACC only allows CANCEL while controls are active.
+    # Pedal-long non-ACC only allows CANCEL when the CC-only cruise state is engaged.
     self.safety.set_controls_allowed(False)
     for btn in range(8):
       self.assertFalse(self._tx(self._button_msg(btn)))
 
     self.safety.set_controls_allowed(True)
     for btn in range(8):
-      self.assertEqual(btn == Buttons.CANCEL, self._tx(self._button_msg(btn)))
+      self.assertFalse(self._tx(self._button_msg(btn)))
+
+    for enabled in (True, False):
+      self._rx(self._pcm_status_msg(enabled))
+      self.assertEqual(enabled, self._tx(self._button_msg(Buttons.CANCEL)))
 
   def test_disable_control_allowed_from_cruise(self):
     pass
@@ -509,7 +514,7 @@ class TestGmCcLongitudinalPandaSchedSafety(TestGmCcLongitudinalSafety):
 
     self.safety.set_controls_allowed(1)
     for btn in range(8):
-      self.assertEqual(btn == Buttons.CANCEL, self._tx(self._button_msg(btn)))
+      self.assertFalse(self._tx(self._button_msg(btn)))
 
     allowed_btns = {Buttons.UNPRESS, Buttons.RES_ACCEL, Buttons.DECEL_SET, Buttons.CANCEL}
     for enabled in (True, False):

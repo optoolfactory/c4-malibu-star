@@ -60,6 +60,7 @@ from openpilot.starpilot.common.maps_catalog import (
   schedule_label,
   schedule_param_value,
 )
+from openpilot.starpilot.common.experimental_state import sync_persist_experimental_state
 from openpilot.starpilot.common.starpilot_utilities import delete_file, get_lock_status, run_cmd
 from openpilot.starpilot.common.starpilot_variables import ACTIVE_THEME_PATH, ERROR_LOGS_PATH, EXCLUDED_KEYS, LEGACY_STARPILOT_PARAM_RENAMES, MAPS_PATH, MODELS_PATH, RESOURCES_REPO, SCREEN_RECORDINGS_PATH, STOCK_THEME_PATH, THEME_SAVE_PATH,\
                                                            default_ev_tuning_enabled, update_starpilot_toggles
@@ -98,6 +99,12 @@ send_from_directory = None
 
 _POND_WEB_DEPS_READY = False
 _POND_WEB_DEPS_ERROR = None
+
+_TESTING_GROUND_CUSTOM_RESERVED_SERVICE = "customReserved9"
+_TESTING_GROUND_CUSTOM_RESERVED_INTERVAL_S = 15.0
+_TESTING_GROUND_CUSTOM_RESERVED_PM = None
+_TESTING_GROUND_CUSTOM_RESERVED_LOCK = threading.Lock()
+_TESTING_GROUND_CUSTOM_RESERVED_LAST_PUBLISH_MONO = 0.0
 
 
 def _is_comma_device_runtime() -> bool:
@@ -392,6 +399,9 @@ def _sanitize_json_value(value):
 
   if isinstance(value, (list, tuple)):
     return [_sanitize_json_value(item) for item in value]
+
+  if isinstance(value, datetime):
+    return value.isoformat()
 
   if isinstance(value, bytes):
     try:
@@ -2613,6 +2623,31 @@ def _normalize_testing_ground_variant(slot_id, variant, slot=None):
   normalized_variant = str(variant or "").strip().upper()
   return normalized_variant if normalized_variant in allowed_variants else _TESTING_GROUNDS_DEFAULT_VARIANT
 
+def _set_testing_ground_variant_fields(slot, variant_labels):
+  for key in list(slot.keys()):
+    if not isinstance(key, str) or not key.endswith("Label"):
+      continue
+    variant = key[:-5].strip()
+    if len(variant) == 1 and variant.isalpha():
+      slot.pop(key, None)
+
+  slot["variantLabels"] = variant_labels
+  for variant, label in variant_labels.items():
+    slot[f"{variant.lower()}Label"] = label
+
+  return slot
+
+def _get_first_selectable_testing_ground_slot_id(slots):
+  for slot in slots:
+    if _is_unused_testing_ground_slot(slot):
+      continue
+
+    slot_id = str(slot.get("id") or "").strip()
+    if slot_id:
+      return slot_id
+
+  return "1"
+
 def _build_testing_ground_fallback_slots():
   definitions_by_id = {}
 
@@ -2625,45 +2660,34 @@ def _build_testing_ground_fallback_slots():
       continue
 
     variant_labels = _get_testing_ground_variant_labels(slot_id, definition)
-    definitions_by_id[slot_id] = {
+    slot = {
       "id": slot_id,
       "name": str(definition.get("name") or "Unused").strip() or "Unused",
       "description": str(definition.get("description") or "").strip(),
-      "variantLabels": variant_labels,
-      "aLabel": variant_labels.get("A", "A"),
-      "bLabel": variant_labels.get("B", "B"),
     }
+    definitions_by_id[slot_id] = _set_testing_ground_variant_fields(slot, variant_labels)
 
   slots = []
   for slot_number in range(1, _TESTING_GROUNDS_SLOT_COUNT + 1):
     slot_id = str(slot_number)
-    default_variant_labels = {
-      _TESTING_GROUNDS_DEFAULT_VARIANT: _TESTING_GROUNDS_DEFAULT_VARIANT,
-      "B": "B",
-    }
     fallback_slot = definitions_by_id.get(slot_id, {
       "id": slot_id,
       "name": "Unused",
       "description": "",
-      "variantLabels": default_variant_labels,
-      "aLabel": "A",
-      "bLabel": "B",
     })
     slot = dict(fallback_slot)
     slot_variant_labels = _get_testing_ground_variant_labels(slot_id, slot)
-    slot["variantLabels"] = slot_variant_labels
-    slot["aLabel"] = slot_variant_labels.get("A", slot.get("aLabel", "A"))
-    slot["bLabel"] = slot_variant_labels.get("B", slot.get("bLabel", "B"))
-    slots.append(slot)
+    slots.append(_set_testing_ground_variant_fields(slot, slot_variant_labels))
 
   return slots
 
 def _default_testing_grounds_state():
+  slots = _build_testing_ground_fallback_slots()
   return {
     "schemaVersion": _TESTING_GROUNDS_SCHEMA_VERSION,
-    "activeSlot": "1",
+    "activeSlot": _get_first_selectable_testing_ground_slot_id(slots),
     "activeVariant": _TESTING_GROUNDS_DEFAULT_VARIANT,
-    "slots": _build_testing_ground_fallback_slots(),
+    "slots": slots,
   }
 
 def _normalize_testing_ground_slot(raw_slot, fallback_slot):
@@ -2679,11 +2703,7 @@ def _normalize_testing_ground_slot(raw_slot, fallback_slot):
   variant_labels = _get_testing_ground_variant_labels(slot.get("id"), raw_slot)
   if not variant_labels:
     variant_labels = _get_testing_ground_variant_labels(slot.get("id"), slot)
-  slot["variantLabels"] = variant_labels
-  slot["aLabel"] = variant_labels.get("A", slot.get("aLabel", "A"))
-  slot["bLabel"] = variant_labels.get("B", slot.get("bLabel", "B"))
-
-  return slot
+  return _set_testing_ground_variant_fields(slot, variant_labels)
 
 def _load_testing_grounds_state_unlocked():
   state = _default_testing_grounds_state()
@@ -2731,15 +2751,25 @@ def _load_testing_grounds_state_unlocked():
   else:
     needs_write = True
 
+  selectable_slot_ids = {
+    str(slot.get("id") or "").strip()
+    for slot in state["slots"]
+    if not _is_unused_testing_ground_slot(slot)
+  }
+  default_slot_id = _get_first_selectable_testing_ground_slot_id(state["slots"])
   active_slot = str(raw_state.get("activeSlot") or "").strip()
-  if active_slot not in fallback_slot_ids:
-    active_slot = state["activeSlot"]
+  active_slot_migrated = active_slot not in fallback_slot_ids or active_slot not in selectable_slot_ids
+  if active_slot_migrated:
+    active_slot = default_slot_id
     needs_write = True
   state["activeSlot"] = active_slot
 
   active_slot_data = _find_testing_ground_slot(state, active_slot)
   raw_active_variant = str(raw_state.get("activeVariant") or "").strip().upper()
-  active_variant = _normalize_testing_ground_variant(active_slot, raw_active_variant, active_slot_data)
+  if active_slot_migrated:
+    active_variant = _TESTING_GROUNDS_DEFAULT_VARIANT
+  else:
+    active_variant = _normalize_testing_ground_variant(active_slot, raw_active_variant, active_slot_data)
   if raw_active_variant != active_variant:
     needs_write = True
   state["activeVariant"] = active_variant
@@ -2790,27 +2820,89 @@ def _serialize_testing_grounds_state(state):
     "selectableSlots": [slot for slot in slots if not _is_unused_testing_ground_slot(slot)],
   }
 
+def _get_testing_ground_custom_reserved_pm():
+  global _TESTING_GROUND_CUSTOM_RESERVED_PM
+
+  with _TESTING_GROUND_CUSTOM_RESERVED_LOCK:
+    if _TESTING_GROUND_CUSTOM_RESERVED_PM is None:
+      _TESTING_GROUND_CUSTOM_RESERVED_PM = messaging.PubMaster([_TESTING_GROUND_CUSTOM_RESERVED_SERVICE])
+    return _TESTING_GROUND_CUSTOM_RESERVED_PM
+
+def _build_testing_ground_custom_reserved_payload(state, reason):
+  serialized = _serialize_testing_grounds_state(state)
+  return {
+    "slotId": serialized["activeSlot"],
+    "slotName": serialized["activeSlotName"],
+    "variant": serialized["activeVariant"],
+    "variantLabel": serialized["activeVariantLabel"],
+    "reason": reason,
+    "wallTimeNanos": time.time_ns(),
+  }
+
+def _publish_testing_ground_custom_reserved(state, reason):
+  global _TESTING_GROUND_CUSTOM_RESERVED_LAST_PUBLISH_MONO
+
+  payload = _build_testing_ground_custom_reserved_payload(state, reason)
+  message_valid = str(payload.get("variant") or "").strip().upper() == "B"
+
+  try:
+    message = messaging.new_message(_TESTING_GROUND_CUSTOM_RESERVED_SERVICE, valid=message_valid)
+    message.customReserved9.slotId = payload["slotId"]
+    message.customReserved9.slotName = payload["slotName"]
+    message.customReserved9.variant = payload["variant"]
+    message.customReserved9.variantLabel = payload["variantLabel"]
+    message.customReserved9.reason = payload["reason"]
+    message.customReserved9.wallTimeNanos = payload["wallTimeNanos"]
+    _get_testing_ground_custom_reserved_pm().send(_TESTING_GROUND_CUSTOM_RESERVED_SERVICE, message)
+  except Exception:
+    return
+
+  with _TESTING_GROUND_CUSTOM_RESERVED_LOCK:
+    _TESTING_GROUND_CUSTOM_RESERVED_LAST_PUBLISH_MONO = time.monotonic()
+
+def _testing_ground_custom_reserved_worker():
+  while True:
+    with _TESTING_GROUND_CUSTOM_RESERVED_LOCK:
+      last_publish_mono = _TESTING_GROUND_CUSTOM_RESERVED_LAST_PUBLISH_MONO
+
+    sleep_s = _TESTING_GROUND_CUSTOM_RESERVED_INTERVAL_S - (time.monotonic() - last_publish_mono)
+    if sleep_s > 0:
+      time.sleep(min(sleep_s, 1.0))
+      continue
+
+    try:
+      _publish_testing_ground_custom_reserved(_get_testing_grounds_state(), "heartbeat")
+    except Exception:
+      time.sleep(1.0)
+
 def _set_testing_ground_selection(slot_id, variant):
   normalized_slot_id = str(slot_id or "").strip()
   requested_variant = str(variant or "").strip().upper()
 
   with _TESTING_GROUNDS_LOCK:
     state, _ = _load_testing_grounds_state_unlocked()
+    previous_slot_id = str(state.get("activeSlot") or "").strip()
+    previous_variant = _normalize_testing_ground_variant(previous_slot_id, state.get("activeVariant"), _find_testing_ground_slot(state, previous_slot_id))
     slot_ids = {slot["id"] for slot in state["slots"]}
     if normalized_slot_id not in slot_ids:
       raise ValueError(f"Unknown testing ground slot '{normalized_slot_id}'.")
 
     slot = _find_testing_ground_slot(state, normalized_slot_id)
+    if _is_unused_testing_ground_slot(slot):
+      raise ValueError(f"Testing ground slot '{normalized_slot_id}' is unavailable.")
+
     allowed_variant_labels = _get_testing_ground_variant_labels(normalized_slot_id, slot)
     if requested_variant not in allowed_variant_labels:
       allowed_variants = ", ".join(sorted(allowed_variant_labels.keys()))
       raise ValueError(f"Variant must be one of: {allowed_variants}.")
 
     normalized_variant = _normalize_testing_ground_variant(normalized_slot_id, requested_variant, slot)
+    changed = normalized_slot_id != previous_slot_id or normalized_variant != previous_variant
     state["activeSlot"] = normalized_slot_id
     state["activeVariant"] = normalized_variant
-    _write_testing_grounds_state_unlocked(state)
-    return state
+    if changed:
+      _write_testing_grounds_state_unlocked(state)
+    return state, changed
 
 def _default_longitudinal_maneuver_status():
   return {
@@ -3429,6 +3521,18 @@ def setup(app):
         return jsonify({
           "message": f"Parameter '{key}' updated successfully.",
           "updated": updated,
+        }), 200
+
+      if key == "PersistExperimentalState":
+        enabled = str_val.strip() in ("1", "true", "True")
+        sync_persist_experimental_state(params, params_memory, enabled)
+        update_starpilot_toggles()
+        return jsonify({
+          "message": f"Parameter '{key}' updated successfully.",
+          "updated": {
+            "PersistExperimentalState": enabled,
+            "PersistedCEStatus": params.get_int("PersistedCEStatus", default=0),
+          },
         }), 200
 
       if key == "CarMake":
@@ -4609,11 +4713,14 @@ def setup(app):
       return jsonify({"error": "Missing 'slotId' in request body."}), 400
 
     try:
-      state = _set_testing_ground_selection(slot_id, variant)
+      state, changed = _set_testing_ground_selection(slot_id, variant)
     except ValueError as exception:
       return jsonify({"error": str(exception)}), 400
     except Exception as exception:
       return jsonify({"error": str(exception)}), 500
+
+    if changed:
+      _publish_testing_ground_custom_reserved(state, "manual_change")
 
     slot = _find_testing_ground_slot(state, slot_id)
     slot_name = slot.get("name", f"Testing Ground {slot_id}")
@@ -5800,10 +5907,11 @@ def setup(app):
         continue
 
       raw_value = params.get(key)
-      if isinstance(raw_value, bytes):
-        value = raw_value.decode("utf-8", errors="replace")
-      else:
-        value = raw_value or "0"
+      value = _sanitize_json_value(raw_value)
+      if value is None:
+        value = "0"
+      elif not isinstance(value, (str, int, float, bool, dict, list)):
+        value = str(value)
 
       toggle_values[key] = value
 
@@ -5927,6 +6035,7 @@ def main():
 
   app = Flask(__name__, static_folder="assets", static_url_path="/assets")
   setup(app)
+  threading.Thread(target=_testing_ground_custom_reserved_worker, daemon=True).start()
 
   # Desktop-only debug mode. On-device must stay on 8082 to match Galaxy FRP routing.
   debug = not _is_comma_device_runtime()

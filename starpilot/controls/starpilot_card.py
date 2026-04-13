@@ -4,9 +4,13 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.car.cruise import CRUISE_LONG_PRESS, ButtonType
 from openpilot.selfdrive.selfdrived.events import ET
 
+from openpilot.starpilot.common.experimental_state import (
+  CEStatus,
+  next_manual_ce_status,
+  sync_manual_ce_state,
+)
 from openpilot.starpilot.common.starpilot_utilities import is_FrogsGoMoo
 from openpilot.starpilot.common.starpilot_variables import ERROR_LOGS_PATH, GearShifter, NON_DRIVING_GEARS
-from openpilot.starpilot.controls.lib.conditional_experimental_mode import CEStatus
 
 class StarPilotCard:
   def __init__(self, CP, FPCP):
@@ -30,7 +34,7 @@ class StarPilotCard:
     self.always_on_lateral_set = bool(FPCP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALWAYS_ON_LATERAL)
     self.frogs_go_moo = is_FrogsGoMoo()
 
-    self.long_press_threshold = CRUISE_LONG_PRESS * (1.5 if self.CP.brand == "gm" else 1)
+    self.long_press_threshold = CRUISE_LONG_PRESS
     self.very_long_press_threshold = CRUISE_LONG_PRESS * 5
 
     self.error_log = ERROR_LOGS_PATH / "error.txt"
@@ -55,14 +59,10 @@ class StarPilotCard:
       return
 
     if starpilot_toggles.conditional_experimental_mode:
-      if self.params_memory.get_int("CEStatus") in (CEStatus["USER_DISABLED"], CEStatus["USER_OVERRIDDEN"]):
-        override_value = CEStatus["OFF"]
-      elif sm["selfdriveState"].experimentalMode:
-        override_value = CEStatus["USER_DISABLED"]
-      else:
-        override_value = CEStatus["USER_OVERRIDDEN"]
-
+      current_status = self.params_memory.get_int("CEStatus", default=CEStatus["OFF"])
+      override_value = next_manual_ce_status(current_status, sm["selfdriveState"].experimentalMode)
       self.params_memory.put_int("CEStatus", override_value)
+      sync_manual_ce_state(self.params, override_value)
     else:
       self.params.put_bool_nonblocking("ExperimentalMode", not sm["selfdriveState"].experimentalMode)
 

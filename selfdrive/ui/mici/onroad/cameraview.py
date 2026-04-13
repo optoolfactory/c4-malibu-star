@@ -8,7 +8,7 @@ from openpilot.system.hardware import TICI
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.egl import init_egl, create_egl_image, destroy_egl_image, bind_egl_image_to_texture, EGLImage
 from openpilot.system.ui.widgets import Widget
-from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 
 CONNECTION_RETRY_INTERVAL = 0.2  # seconds between connection attempts
 
@@ -37,7 +37,7 @@ void main() {
 }
 """
 
-FRAME_FRAGMENT_SHADER_EGL = """
+FRAME_FRAGMENT_SHADER_EXTERNAL = """
   #version 300 es
   #extension GL_OES_EGL_image_external_essl3 : enable
   precision mediump float;
@@ -49,14 +49,9 @@ FRAME_FRAGMENT_SHADER_EGL = """
 
   void main() {
     vec4 color = texture(texture0, fragTexCoord);
+    // Keep the onroad camera feed full-color in every driving state.
     if (engaged == 1) {
-      float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));  // Luma
-      color.rgb = mix(vec3(gray), color.rgb, 0.2);  // 20% saturation
-      color.rgb = clamp((color.rgb - 0.5) * 1.2 + 0.5, 0.0, 1.0);  // +20% contrast
-      color.rgb = pow(color.rgb, vec3(1.0/1.28));
-      fragColor = vec4(color.rgb, color.a);
-    } else {
-      color.rgb *= 0.85;  // 85% opacity
+      color.rgb = color.rgb;
     }
     if (enhance_driver == 1) {
       float brightness = 1.1;
@@ -69,7 +64,7 @@ FRAME_FRAGMENT_SHADER_EGL = """
   }
   """
 
-FRAME_FRAGMENT_SHADER_TEXTURES = VERSION + """
+FRAME_FRAGMENT_SHADER_YUV = VERSION + """
   in vec2 fragTexCoord;
   uniform sampler2D texture0;
   uniform sampler2D texture1;
@@ -81,12 +76,9 @@ FRAME_FRAGMENT_SHADER_TEXTURES = VERSION + """
     float y = texture(texture0, fragTexCoord).r;
     vec2 uv = texture(texture1, fragTexCoord).ra - 0.5;
     vec3 rgb = vec3(y + 1.402*uv.y, y - 0.344*uv.x - 0.714*uv.y, y + 1.772*uv.x);
+    // Keep the onroad camera feed full-color in every driving state.
     if (engaged == 1) {
-      float gray = dot(rgb, vec3(0.299, 0.587, 0.114));
-      rgb = mix(vec3(gray), rgb, 0.2);  // 20% saturation
-      rgb = clamp((rgb - 0.5) * 1.2 + 0.5, 0.0, 1.0);  // +20% contrast
-    } else {
-      rgb *= 0.85;  // 85% opacity
+      rgb = rgb;
     }
     // TODO: the images out of camerad need some more correction and
     // the ui should apply a gamma curve for the device display
@@ -118,6 +110,17 @@ class CameraView(Widget):
 
     self._texture_needs_update = True
     self.last_connection_attempt: float = 0.0
+    self._use_egl = TICI and init_egl()
+    if TICI and not self._use_egl:
+      cloudlog.error("CameraView EGL init failed, falling back to texture rendering")
+
+    frame_shader = FRAME_FRAGMENT_SHADER_EXTERNAL if self._use_egl else FRAME_FRAGMENT_SHADER_YUV
+    self.shader = rl.load_shader_from_memory(VERTEX_SHADER, frame_shader)
+    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not self._use_egl else -1
+    self._engaged_loc = rl.get_shader_location(self.shader, "engaged")
+    self._engaged_val = rl.ffi.new("int[1]", [1])
+    self._enhance_driver_loc = rl.get_shader_location(self.shader, "enhance_driver")
+    self._enhance_driver_val = rl.ffi.new("int[1]", [1 if stream_type == VisionStreamType.VISION_STREAM_DRIVER else 0])
 
     self.frame: VisionBuf | None = None
     self.texture_y: rl.Texture | None = None
@@ -128,20 +131,9 @@ class CameraView(Widget):
     self.egl_texture: rl.Texture | None = None
 
     self._placeholder_color: rl.Color | None = None
-    self._use_egl = TICI and init_egl()
 
-    fragment_shader = FRAME_FRAGMENT_SHADER_EGL if self._use_egl else FRAME_FRAGMENT_SHADER_TEXTURES
-    self.shader = rl.load_shader_from_memory(VERTEX_SHADER, fragment_shader)
-    self._texture1_loc: int = rl.get_shader_location(self.shader, "texture1") if not self._use_egl else -1
-    self._engaged_loc = rl.get_shader_location(self.shader, "engaged")
-    self._engaged_val = rl.ffi.new("int[1]", [1])
-    self._enhance_driver_loc = rl.get_shader_location(self.shader, "enhance_driver")
-    self._enhance_driver_val = rl.ffi.new("int[1]", [1 if stream_type == VisionStreamType.VISION_STREAM_DRIVER else 0])
-
-    # Keep the UI alive if EGL cannot be used on device startup.
-    if TICI and not self._use_egl:
-      cloudlog.warning(f"Failed to initialize EGL for {self._name}; falling back to texture rendering")
-    elif self._use_egl:
+    # Initialize EGL for zero-copy rendering when available.
+    if self._use_egl:
       # Create a 1x1 pixel placeholder texture for EGL image binding
       temp_image = rl.gen_image_color(1, 1, rl.BLACK)
       self.egl_texture = rl.load_texture_from_image(temp_image)
@@ -155,11 +147,11 @@ class CameraView(Widget):
       # Prevent old frames from showing when going onroad. Qt has a separate thread
       # which drains the VisionIpcClient SubSocket for us. Re-connecting is not enough
       # and only clears internal buffers, not the message queue.
-      self.frame = None
       self.available_streams.clear()
       if self.client:
         del self.client
       self.client = VisionIpcClient(self._name, self._stream_type, conflate=True)
+    self.frame = None
 
   def _set_placeholder_color(self, color: rl.Color):
     """Set a placeholder color to be drawn when no frame is available."""
@@ -324,9 +316,11 @@ class CameraView(Widget):
     rl.end_shader_mode()
 
   def _update_texture_color_filtering(self):
-    self._engaged_val[0] = 1 if ui_state.started else 0
-    rl.set_shader_value(self.shader, self._engaged_loc, self._engaged_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
-    rl.set_shader_value(self.shader, self._enhance_driver_loc, self._enhance_driver_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+    self._engaged_val[0] = 1 if ui_state.status != UIStatus.DISENGAGED else 0
+    if self._engaged_loc >= 0:
+      rl.set_shader_value(self.shader, self._engaged_loc, self._engaged_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
+    if self._enhance_driver_loc >= 0:
+      rl.set_shader_value(self.shader, self._enhance_driver_loc, self._enhance_driver_val, rl.ShaderUniformDataType.SHADER_UNIFORM_INT)
 
   def _ensure_connection(self) -> bool:
     if not self.client.is_connected():
@@ -377,7 +371,6 @@ class CameraView(Widget):
     self.client = self._target_client
     self._stream_type = self._target_stream_type
     self._texture_needs_update = True
-    self._enhance_driver_val[0] = 1 if self._stream_type == VisionStreamType.VISION_STREAM_DRIVER else 0
 
     # Reset state
     self._target_client = None

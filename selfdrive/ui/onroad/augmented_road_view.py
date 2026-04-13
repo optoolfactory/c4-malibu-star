@@ -11,6 +11,7 @@ from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
+from openpilot.selfdrive.ui.lib.starpilot_status import get_screen_edge_color
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
@@ -215,7 +216,7 @@ class AugmentedRoadView(CameraView):
   def _draw_border(self, rect: rl.Rectangle):
     rl.draw_rectangle_lines_ex(rect, UI_BORDER_SIZE, rl.BLACK)
     border_roundness = 0.12
-    border_color = BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_color = get_screen_edge_color(ui_state)
     border_rect = rl.Rectangle(rect.x + UI_BORDER_SIZE, rect.y + UI_BORDER_SIZE,
                                rect.width - 2 * UI_BORDER_SIZE, rect.height - 2 * UI_BORDER_SIZE)
     rl.draw_rectangle_rounded_lines_ex(border_rect, border_roundness, 10, UI_BORDER_SIZE, border_color)
@@ -325,6 +326,7 @@ class AugmentedRoadView(CameraView):
 if __name__ == "__main__":
   gui_app.init_window("OnRoad Camera View")
   road_camera_view = AugmentedRoadView(ROAD_CAM)
+  gui_app.push_widget(road_camera_view)
   print("***press space to switch camera view***")
   try:
     for _ in gui_app.render():
@@ -333,6 +335,5 @@ if __name__ == "__main__":
         if WIDE_CAM in road_camera_view.available_streams:
           stream = ROAD_CAM if road_camera_view.stream_type == WIDE_CAM else WIDE_CAM
           road_camera_view.switch_stream(stream)
-      road_camera_view.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
   finally:
     road_camera_view.close()
