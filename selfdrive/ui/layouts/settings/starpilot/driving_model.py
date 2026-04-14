@@ -31,32 +31,32 @@ from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dial
 from openpilot.system.ui.widgets.label import gui_label
 from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.selfdrive.ui.layouts.settings.starpilot.panel import StarPilotPanel
-from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherSliderDialog, hex_to_color
+from openpilot.selfdrive.ui.layouts.settings.starpilot.aethergrid import AetherButton, AetherChip, AetherListColors, AetherScrollbar, AetherSliderDialog
 
 
-MODEL_PANEL_BG = rl.Color(8, 8, 10, 255)
-MODEL_PANEL_BORDER = rl.Color(255, 255, 255, 22)
-MODEL_PANEL_GLOW = rl.Color(92, 116, 151, 34)
-MODEL_HEADER_TEXT = rl.Color(236, 242, 250, 255)
-MODEL_SUBTEXT = rl.Color(164, 177, 196, 255)
-MODEL_MUTED = rl.Color(126, 139, 158, 255)
-MODEL_ROW_BG = rl.Color(255, 255, 255, 0)
-MODEL_ROW_BORDER = rl.Color(255, 255, 255, 0)
-MODEL_ROW_SEPARATOR = rl.Color(255, 255, 255, 16)
-MODEL_ROW_HOVER = rl.Color(255, 255, 255, 8)
-MODEL_CURRENT_BG = rl.Color(89, 116, 151, 18)
-MODEL_CURRENT_BORDER = rl.Color(116, 136, 168, 44)
-MODEL_ACTION_BG = rl.Color(255, 255, 255, 0)
-MODEL_ACTION_SEPARATOR = rl.Color(255, 255, 255, 18)
-MODEL_PRIMARY = hex_to_color("#597497")
-MODEL_PRIMARY_SOFT = rl.Color(89, 116, 151, 48)
-MODEL_DANGER = rl.Color(173, 78, 90, 255)
-MODEL_DANGER_SOFT = rl.Color(173, 78, 90, 44)
-MODEL_SUCCESS = rl.Color(94, 168, 130, 255)
-MODEL_SUCCESS_SOFT = rl.Color(94, 168, 130, 44)
-MODEL_WARNING = rl.Color(204, 158, 83, 255)
-MODEL_SCROLL_TRACK = rl.Color(255, 255, 255, 10)
-MODEL_SCROLL_THUMB = rl.Color(255, 255, 255, 68)
+MODEL_PANEL_BG = AetherListColors.PANEL_BG
+MODEL_PANEL_BORDER = AetherListColors.PANEL_BORDER
+MODEL_PANEL_GLOW = AetherListColors.PANEL_GLOW
+MODEL_HEADER_TEXT = AetherListColors.HEADER
+MODEL_SUBTEXT = AetherListColors.SUBTEXT
+MODEL_MUTED = AetherListColors.MUTED
+MODEL_ROW_BG = AetherListColors.ROW_BG
+MODEL_ROW_BORDER = AetherListColors.ROW_BORDER
+MODEL_ROW_SEPARATOR = AetherListColors.ROW_SEPARATOR
+MODEL_ROW_HOVER = AetherListColors.ROW_HOVER
+MODEL_CURRENT_BG = AetherListColors.CURRENT_BG
+MODEL_CURRENT_BORDER = AetherListColors.CURRENT_BORDER
+MODEL_ACTION_BG = AetherListColors.ACTION_BG
+MODEL_ACTION_SEPARATOR = AetherListColors.ACTION_SEPARATOR
+MODEL_PRIMARY = AetherListColors.PRIMARY
+MODEL_PRIMARY_SOFT = AetherListColors.PRIMARY_SOFT
+MODEL_DANGER = AetherListColors.DANGER
+MODEL_DANGER_SOFT = AetherListColors.DANGER_SOFT
+MODEL_SUCCESS = AetherListColors.SUCCESS
+MODEL_SUCCESS_SOFT = AetherListColors.SUCCESS_SOFT
+MODEL_WARNING = AetherListColors.WARNING
+MODEL_SCROLL_TRACK = AetherListColors.SCROLL_TRACK
+MODEL_SCROLL_THUMB = AetherListColors.SCROLL_THUMB
 
 MAX_CONTENT_WIDTH = 1560
 OUTER_MARGIN_X = 18
@@ -65,7 +65,7 @@ PANEL_RADIUS = 0.055
 PANEL_PADDING_X = 16
 PANEL_PADDING_TOP = 28
 PANEL_PADDING_BOTTOM = 22
-HEADER_HEIGHT = 184
+HEADER_HEIGHT = 210
 SECTION_GAP = 28
 SECTION_HEADER_HEIGHT = 34
 SECTION_HEADER_GAP = 12
@@ -113,6 +113,7 @@ class DrivingModelManagerView(Widget):
     super().__init__()
     self._controller = controller
     self._scroll_panel = GuiScrollPanel2(horizontal=False)
+    self._scrollbar = AetherScrollbar()
     self._content_height = 0.0
     self._scroll_offset = 0.0
     self._pressed_target: str | None = None
@@ -120,16 +121,42 @@ class DrivingModelManagerView(Widget):
     self._row_rects: dict[str, rl.Rectangle] = {}
     self._action_rects: dict[str, rl.Rectangle] = {}
     self._utility_rects: dict[str, rl.Rectangle] = {}
-    self._header_rects: dict[str, rl.Rectangle] = {}
+    self._menu_sub_rects: dict[str, rl.Rectangle] = {}
     self._confirm_key: str | None = None
     self._confirm_until = 0.0
-    self._confirm_mix: dict[str, float] = {}
     self._transition_starts: dict[str, tuple[float, float]] = {}
     self._known_install_state: dict[str, bool] = {}
     self._active_download_key: str | None = None
     self._shell_rect = rl.Rectangle(0, 0, 0, 0)
     self._scroll_rect = rl.Rectangle(0, 0, 0, 0)
     self._metric_font = gui_app.font(FontWeight.BOLD)
+    self._primary_header_button = self._child(
+      AetherButton(
+        lambda: self._controller.primary_header_button_state()[0],
+        lambda: self._controller.cancel_active_download() if self._controller._is_download_active() else self._controller.download_all_missing(),
+        enabled=lambda: self._controller.primary_header_button_state()[1],
+        emphasized=True,
+      )
+    )
+    self._secondary_header_button = self._child(
+      AetherButton(
+        lambda: self._controller.secondary_header_button_state()[0],
+        self._controller.refresh_manifest,
+        enabled=lambda: self._controller.secondary_header_button_state()[1],
+        emphasized=False,
+      )
+    )
+    self._random_model_button = self._child(
+      AetherButton(
+        lambda: self._controller.random_model_button_label(),
+        self._controller.toggle_model_randomizer,
+        emphasized=False,
+        font_size=22,
+      )
+    )
+    self._primary_header_button.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
+    self._secondary_header_button.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
+    self._random_model_button.set_touch_valid_callback(lambda: self._scroll_panel.is_touch_valid())
 
   def _clear_ephemeral_state(self):
     self._pressed_target = None
@@ -151,14 +178,7 @@ class DrivingModelManagerView(Widget):
     if self._confirm_key is not None and time.monotonic() >= self._confirm_until:
       self._confirm_key = None
 
-    current_keys = set(self._controller._catalog_entries.keys())
-    for key in list(self._confirm_mix.keys()):
-      if key not in current_keys and self._confirm_mix[key] <= 0.01:
-        self._confirm_mix.pop(key, None)
-
-    for key in current_keys:
-      target = 1.0 if key == self._confirm_key else 0.0
-      self._confirm_mix[key] = _ease(self._confirm_mix.get(key, 0.0), target)
+    self._random_model_button.set_emphasized(self._controller._params.get_bool("ModelRandomizer"))
 
     progress = self._controller.download_progress_text()
     active_key = canonical_model_key(self._controller._params_memory.get(MODEL_DOWNLOAD_PARAM, encoding="utf-8") or "")
@@ -203,9 +223,10 @@ class DrivingModelManagerView(Widget):
     self._pressed_target = None
 
   def _target_at(self, mouse_pos: MousePos) -> str | None:
-    for name, rect in self._header_rects.items():
-      if rl.check_collision_point_rec(mouse_pos, rect):
-        return name
+    for sub_key, rect in self._menu_sub_rects.items():
+      visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
+      if visible_rect.width > 0 and visible_rect.height > 0 and rl.check_collision_point_rec(mouse_pos, visible_rect):
+        return f"menu:{sub_key}"
 
     for key, rect in self._action_rects.items():
       visible_rect = rl.get_collision_rec(rect, self._scroll_rect)
@@ -228,17 +249,6 @@ class DrivingModelManagerView(Widget):
     if not target:
       return
 
-    if target == "header:primary":
-      if self._controller._is_download_active():
-        self._controller.cancel_active_download()
-      else:
-        self._controller.download_all_missing()
-      return
-
-    if target == "header:secondary":
-      self._controller.refresh_manifest()
-      return
-
     if target.startswith("row:"):
       self._confirm_key = None
       model_key = target.split(":", 1)[1]
@@ -259,12 +269,23 @@ class DrivingModelManagerView(Widget):
       if not self._controller.is_model_removable(model_key):
         return
 
+      # Toggle the options menu open/closed
       if self._confirm_key == model_key:
         self._confirm_key = None
-        self._controller.delete_model(model_key)
       else:
         self._confirm_key = model_key
         self._confirm_until = time.monotonic() + CONFIRM_TIMEOUT_SECONDS
+      return
+
+    if target.startswith("menu:"):
+      parts = target.split(":", 2)
+      model_key = parts[1] if len(parts) > 1 else ""
+      action = parts[2] if len(parts) > 2 else ""
+      self._confirm_key = None
+      if action == "delete":
+        self._controller.delete_model(model_key)
+      elif action == "favorite":
+        self._controller.toggle_favorite(model_key)
       return
 
     if target.startswith("utility:"):
@@ -284,7 +305,7 @@ class DrivingModelManagerView(Widget):
     self._row_rects.clear()
     self._action_rects.clear()
     self._utility_rects.clear()
-    self._header_rects.clear()
+    self._menu_sub_rects.clear()
 
     shell_w = min(rect.width - OUTER_MARGIN_X * 2, MAX_CONTENT_WIDTH)
     shell_x = rect.x + (rect.width - shell_w) / 2
@@ -321,12 +342,17 @@ class DrivingModelManagerView(Widget):
       self._draw_scrollbar(scroll_rect)
 
     if self._content_height > scroll_rect.height + 4:
-      top_fade = min(FADE_HEIGHT, int(scroll_rect.height / 4))
-      bottom_y = int(scroll_rect.y + scroll_rect.height - top_fade)
-      rl.draw_rectangle_gradient_v(int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width - 12), top_fade,
-                                   _with_alpha(MODEL_PANEL_BG, 255), _with_alpha(MODEL_PANEL_BG, 0))
-      rl.draw_rectangle_gradient_v(int(scroll_rect.x), bottom_y, int(scroll_rect.width - 12), top_fade,
-                                   _with_alpha(MODEL_PANEL_BG, 0), _with_alpha(MODEL_PANEL_BG, 255))
+      fade_height = min(FADE_HEIGHT, int(scroll_rect.height / 4))
+      if self._scroll_offset < -4:
+        rl.draw_rectangle_gradient_v(
+          int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width - 12), fade_height, _with_alpha(MODEL_PANEL_BG, 255), _with_alpha(MODEL_PANEL_BG, 0)
+        )
+
+      if (-self._scroll_offset + scroll_rect.height) < (self._content_height - 4):
+        bottom_y = int(scroll_rect.y + scroll_rect.height - fade_height)
+        rl.draw_rectangle_gradient_v(
+          int(scroll_rect.x), bottom_y, int(scroll_rect.width - 12), fade_height, _with_alpha(MODEL_PANEL_BG, 0), _with_alpha(MODEL_PANEL_BG, 255)
+        )
 
   def _draw_header(self, rect: rl.Rectangle):
     title_rect = rl.Rectangle(rect.x, rect.y + 4, rect.width * 0.55, 40)
@@ -344,18 +370,35 @@ class DrivingModelManagerView(Widget):
     gui_label(current_value_rect, self._controller._current_model_name, 22, MODEL_HEADER_TEXT, FontWeight.MEDIUM)
 
     right_panel_w = min(390, rect.width * 0.35)
-    stack_height = BUTTON_HEIGHT * 2 + BUTTON_GAP
-    stack_y = rect.y + 24
-    right_rect = rl.Rectangle(rect.x + rect.width - right_panel_w, stack_y, right_panel_w, stack_height)
+    btn_gap = 10
+    stack_y = rect.y + 8
+    right_x = rect.x + rect.width - right_panel_w
 
-    primary_label, primary_enabled = self._controller.primary_header_button_state()
-    secondary_label, secondary_enabled = self._controller.secondary_header_button_state()
-    primary_rect = rl.Rectangle(right_rect.x, right_rect.y, right_rect.width, BUTTON_HEIGHT)
-    secondary_rect = rl.Rectangle(right_rect.x, primary_rect.y + BUTTON_HEIGHT + BUTTON_GAP, right_rect.width, BUTTON_HEIGHT)
-    self._header_rects["header:primary"] = primary_rect if primary_enabled else rl.Rectangle(-1, -1, 0, 0)
-    self._header_rects["header:secondary"] = secondary_rect if secondary_enabled else rl.Rectangle(-1, -1, 0, 0)
-    self._draw_button(primary_rect, primary_label, primary_enabled, emphasized=True)
-    self._draw_button(secondary_rect, secondary_label, secondary_enabled, emphasized=False)
+    primary_rect = rl.Rectangle(right_x, stack_y, right_panel_w, BUTTON_HEIGHT)
+    secondary_rect = rl.Rectangle(right_x, stack_y + BUTTON_HEIGHT + btn_gap, right_panel_w, BUTTON_HEIGHT)
+    random_rect = rl.Rectangle(right_x, stack_y + (BUTTON_HEIGHT + btn_gap) * 2, right_panel_w, BUTTON_HEIGHT)
+
+    self._primary_header_button.render(primary_rect)
+    self._secondary_header_button.render(secondary_rect)
+    self._random_model_button.render(random_rect)
+
+    # LED indicator drawn on top of the randomizer button
+    led_x = int(random_rect.x + random_rect.width - 26)
+    led_y = int(random_rect.y + random_rect.height / 2)
+    randomizer_on = self._controller._params.get_bool("ModelRandomizer")
+    if randomizer_on:
+      # Lit: bright theme-blue LED with layered glow rings
+      led_color = rl.Color(110, 175, 245, 255)
+      rl.draw_circle(led_x, led_y, 18, rl.Color(110, 175, 245, 18))
+      rl.draw_circle(led_x, led_y, 12, rl.Color(110, 175, 245, 48))
+      rl.draw_circle(led_x, led_y, 7, rl.Color(110, 175, 245, 100))
+      rl.draw_circle(led_x, led_y, 6, led_color)
+      rl.draw_circle(led_x - 2, led_y - 2, 2, rl.Color(210, 235, 255, 200))
+    else:
+      # Unlit: dark socket with faint ring
+      rl.draw_circle(led_x, led_y, 8, rl.Color(10, 10, 14, 230))
+      rl.draw_circle(led_x, led_y, 6, rl.Color(35, 40, 50, 255))
+      rl.draw_ring(rl.Vector2(led_x, led_y), 6, 7, 0, 360, 24, rl.Color(70, 78, 95, 140))
 
   def _measure_content_height(self, width: float) -> float:
     sections = self._build_sections(width)
@@ -406,10 +449,22 @@ class DrivingModelManagerView(Widget):
     state_rect = rl.Rectangle(rect.x, rect.y, rect.width - 18, rect.height)
     rl.draw_rectangle_rounded(state_rect, 0.08, 18, rl.Color(255, 255, 255, 5))
     rl.draw_rectangle_rounded_lines_ex(state_rect, 0.08, 18, 1, rl.Color(255, 255, 255, 14))
-    gui_label(rl.Rectangle(state_rect.x, state_rect.y + 42, state_rect.width, 40), self._controller.empty_state_title(), 32, MODEL_HEADER_TEXT, FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-    gui_label(rl.Rectangle(state_rect.x + 48, state_rect.y + 88, state_rect.width - 96, 72), self._controller.empty_state_body(), 24, MODEL_SUBTEXT, FontWeight.NORMAL,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    gui_label(
+      rl.Rectangle(state_rect.x, state_rect.y + 42, state_rect.width, 40),
+      self._controller.empty_state_title(),
+      32,
+      MODEL_HEADER_TEXT,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
+    gui_label(
+      rl.Rectangle(state_rect.x + 48, state_rect.y + 88, state_rect.width - 96, 72),
+      self._controller.empty_state_body(),
+      24,
+      MODEL_SUBTEXT,
+      FontWeight.NORMAL,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
 
   def _draw_model_section(self, x: float, y: float, width: float, title: str, entries: list[ModelCatalogEntry]) -> float:
     title_rect = rl.Rectangle(x, y, width - 18, SECTION_HEADER_HEIGHT)
@@ -429,7 +484,7 @@ class DrivingModelManagerView(Widget):
     current = self._controller.is_current_model(entry.key)
     downloading = self._controller.is_entry_actively_downloading(entry.key, self._active_download_key)
     removable = self._controller.is_model_removable(entry.key)
-    confirm_mix = self._confirm_mix.get(entry.key, 0.0)
+    is_menu_open = (self._confirm_key == entry.key)
 
     row_bg = MODEL_CURRENT_BG if current else MODEL_ROW_BG
     row_border = MODEL_CURRENT_BORDER if current else MODEL_ROW_BORDER
@@ -439,7 +494,9 @@ class DrivingModelManagerView(Widget):
       row_bg = rl.Color(row_bg.r, row_bg.g, row_bg.b, min(row_bg.a + 8, 255))
 
     alpha, offset_y, scale = self._row_transition_style(entry.key)
-    draw_rect = rl.Rectangle(rect.x + (rect.width * (1 - scale) / 2), rect.y + offset_y + (rect.height * (1 - scale) / 2), rect.width * scale, rect.height * scale)
+    draw_rect = rl.Rectangle(
+      rect.x + (rect.width * (1 - scale) / 2), rect.y + offset_y + (rect.height * (1 - scale) / 2), rect.width * scale, rect.height * scale
+    )
 
     if row_bg.a > 0:
       rl.draw_rectangle_rounded(draw_rect, ROW_RADIUS, 18, _with_alpha(row_bg, alpha))
@@ -470,7 +527,7 @@ class DrivingModelManagerView(Widget):
         self._draw_protected_action(action_rect)
       else:
         self._action_rects[entry.key] = action_rect
-        self._draw_ready_action(action_rect, confirm_mix)
+        self._draw_menu_action(action_rect, is_menu_open, entry)
     else:
       self._action_rects[entry.key] = action_rect
       if downloading:
@@ -479,7 +536,13 @@ class DrivingModelManagerView(Widget):
         self._draw_download_action(action_rect)
 
   def _draw_model_info(self, rect: rl.Rectangle, entry: ModelCatalogEntry, current: bool):
-    title_rect = rl.Rectangle(rect.x, rect.y, rect.width, 34)
+    heart_offset = 0
+    if entry.user_favorite:
+      heart_color = rl.Color(210, 100, 130, 230)
+      heart_center = rl.Vector2(rect.x + 15, rect.y + 17)
+      self._draw_heart_icon(heart_center, heart_color)
+      heart_offset = 34
+    title_rect = rl.Rectangle(rect.x + heart_offset, rect.y, rect.width - heart_offset, 34)
     gui_label(title_rect, entry.name, 34, MODEL_HEADER_TEXT, FontWeight.MEDIUM)
 
     meta_parts = [part for part in (entry.series, entry.released) if part]
@@ -507,8 +570,14 @@ class DrivingModelManagerView(Widget):
     center_x = rect.x + rect.width / 2
     center_y = rect.y + rect.height / 2 - 8
     self._draw_download_icon(rl.Vector2(center_x, center_y), MODEL_HEADER_TEXT)
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 22), tr("Download"), 18, MODEL_SUBTEXT, FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    gui_label(
+      rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 22),
+      tr("Download"),
+      18,
+      MODEL_SUBTEXT,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
 
   def _draw_downloading_action(self, rect: rl.Rectangle, progress_text: str):
     center = rl.Vector2(rect.x + rect.width / 2, rect.y + rect.height / 2 - 8)
@@ -517,36 +586,67 @@ class DrivingModelManagerView(Widget):
     rl.draw_ring(center, 20, 26, phase, phase + 260, 48, MODEL_PRIMARY)
 
     label = progress_text if progress_text else tr("Downloading")
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 22), label, 17, MODEL_SUBTEXT, FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+    gui_label(
+      rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 22),
+      label,
+      17,
+      MODEL_SUBTEXT,
+      FontWeight.MEDIUM,
+      alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+    )
 
-  def _draw_ready_action(self, rect: rl.Rectangle, confirm_mix: float):
-    confirm_alpha = int(255 * confirm_mix)
-    ready_alpha = int(255 * (1.0 - confirm_mix))
-    center = rl.Vector2(rect.x + rect.width / 2, rect.y + rect.height / 2 - 12)
+  def _draw_menu_action(self, rect: rl.Rectangle, is_open: bool, entry: ModelCatalogEntry):
+    if not is_open:
+      # Three-dot menu indicator
+      center_x = rect.x + rect.width / 2
+      center_y = rect.y + rect.height / 2 - 10
+      dot_r = 4
+      gap = 12
+      for i in range(3):
+        rl.draw_circle(int(center_x + (i - 1) * gap), int(center_y), dot_r, _with_alpha(MODEL_HEADER_TEXT, 200))
+      gui_label(
+        rl.Rectangle(rect.x + 16, rect.y + rect.height - 38, rect.width - 32, 22),
+        tr("Options"),
+        18,
+        MODEL_SUBTEXT,
+        FontWeight.MEDIUM,
+        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
+      )
+    else:
+      # Expanded sub-button menu
+      btn_h = 40
+      gap = 8
+      total_h = btn_h * 2 + gap
+      start_y = rect.y + (rect.height - total_h) / 2
 
-    if ready_alpha > 2:
-      radius = 24 - (confirm_mix * 1.5)
-      rl.draw_ring(center, radius - 3, radius, 0, 360, 48, _with_alpha(MODEL_SUCCESS, ready_alpha))
-      rl.draw_text_ex(self._metric_font, "✓", rl.Vector2(round(center.x - 15), round(center.y - 20)), 36, 0, _with_alpha(MODEL_HEADER_TEXT, ready_alpha))
+      delete_rect = rl.Rectangle(rect.x + 10, start_y, rect.width - 20, btn_h)
+      fav_rect = rl.Rectangle(rect.x + 10, start_y + btn_h + gap, rect.width - 20, btn_h)
 
-    if confirm_alpha > 2:
-      self._draw_trash_icon(center, _with_alpha(MODEL_DANGER, confirm_alpha))
+      self._menu_sub_rects[f"{entry.key}:delete"] = delete_rect
+      self._menu_sub_rects[f"{entry.key}:favorite"] = fav_rect
 
-    ready_label = _with_alpha(MODEL_SUBTEXT, ready_alpha)
-    confirm_label = _with_alpha(MODEL_DANGER, confirm_alpha)
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 18), tr("Ready"), 18, ready_label, FontWeight.MEDIUM,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-    gui_label(rl.Rectangle(rect.x + 16, rect.y + rect.height - 40, rect.width - 32, 18), tr("Remove"), 18, confirm_label, FontWeight.SEMI_BOLD,
-              alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      # Delete button
+      rl.draw_rectangle_rounded(delete_rect, 0.35, 12, MODEL_DANGER_SOFT)
+      rl.draw_rectangle_rounded_lines_ex(delete_rect, 0.35, 12, 1, _with_alpha(MODEL_DANGER, 70))
+      gui_label(delete_rect, tr("Delete"), 18, MODEL_DANGER, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+
+      # Favorite toggle button
+      is_fav = entry.user_favorite
+      fav_fill = rl.Color(210, 100, 130, 44) if is_fav else MODEL_PRIMARY_SOFT
+      fav_border = _with_alpha(rl.Color(210, 100, 130, 255) if is_fav else MODEL_PRIMARY, 70)
+      fav_text_color = rl.Color(210, 100, 130, 255) if is_fav else MODEL_PRIMARY
+      fav_label = tr("Unfavorite") if is_fav else tr("Favorite")
+      rl.draw_rectangle_rounded(fav_rect, 0.35, 12, fav_fill)
+      rl.draw_rectangle_rounded_lines_ex(fav_rect, 0.35, 12, 1, fav_border)
+      gui_label(fav_rect, fav_label, 18, fav_text_color, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
 
   def _draw_current_action(self, rect: rl.Rectangle):
     chip_rect = rl.Rectangle(rect.x + 24, rect.y + (rect.height - 42) / 2, rect.width - 48, 42)
-    self._draw_chip(chip_rect, tr("Current"), rl.Color(89, 116, 151, 26), rl.Color(116, 136, 168, 52), MODEL_HEADER_TEXT)
+    AetherChip(tr("Current"), rl.Color(89, 116, 151, 26), rl.Color(116, 136, 168, 52), MODEL_HEADER_TEXT, font_size=18).render(chip_rect)
 
   def _draw_protected_action(self, rect: rl.Rectangle):
     chip_rect = rl.Rectangle(rect.x + 20, rect.y + (rect.height - 42) / 2, rect.width - 40, 42)
-    self._draw_chip(chip_rect, tr("Protected"), rl.Color(255, 255, 255, 10), MODEL_MUTED, MODEL_SUBTEXT)
+    AetherChip(tr("Protected"), rl.Color(255, 255, 255, 10), MODEL_MUTED, MODEL_SUBTEXT, font_size=18).render(chip_rect)
 
   def _draw_trash_icon(self, center: rl.Vector2, color: rl.Color):
     bin_rect = rl.Rectangle(center.x - 12, center.y - 12, 24, 24)
@@ -559,6 +659,18 @@ class DrivingModelManagerView(Widget):
     rl.draw_line(int(center.x - 6), int(center.y - 8), int(center.x - 6), int(center.y + 8), stripe)
     rl.draw_line(int(center.x), int(center.y - 8), int(center.x), int(center.y + 8), stripe)
     rl.draw_line(int(center.x + 6), int(center.y - 8), int(center.x + 6), int(center.y + 8), stripe)
+
+  def _draw_heart_icon(self, center: rl.Vector2, color: rl.Color):
+    # Two rounded bumps at top
+    rl.draw_circle(int(center.x - 5), int(center.y - 3), 7, color)
+    rl.draw_circle(int(center.x + 5), int(center.y - 3), 7, color)
+    # Downward triangle for the bottom point
+    rl.draw_triangle(
+      rl.Vector2(center.x + 13, center.y + 1),
+      rl.Vector2(center.x - 13, center.y + 1),
+      rl.Vector2(center.x, center.y + 13),
+      color,
+    )
 
   def _draw_download_icon(self, center: rl.Vector2, color: rl.Color):
     shaft_top = rl.Vector2(center.x, center.y - 18)
@@ -613,8 +725,9 @@ class DrivingModelManagerView(Widget):
     else:
       value_rect = rl.Rectangle(rect.x + rect.width - 270, rect.y + 20, 220, 28)
       gui_label(value_rect, row["value"], 24, MODEL_HEADER_TEXT, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)
-      gui_label(rl.Rectangle(rect.x + rect.width - 62, rect.y + 18, 26, 26), "›", 32, MODEL_MUTED, FontWeight.MEDIUM,
-                alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      gui_label(
+        rl.Rectangle(rect.x + rect.width - 62, rect.y + 18, 26, 26), "›", 32, MODEL_MUTED, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER
+      )
 
   def _draw_toggle(self, rect: rl.Rectangle, enabled: bool):
     toggle_w = 78
@@ -625,42 +738,8 @@ class DrivingModelManagerView(Widget):
     rl.draw_rectangle_rounded(toggle_rect, 1.0, 16, track)
     rl.draw_circle(int(knob_x), int(toggle_rect.y + toggle_rect.height / 2), 16, rl.WHITE)
 
-  def _draw_button(self, rect: rl.Rectangle, label: str, enabled: bool, emphasized: bool):
-    hovered = enabled and rl.check_collision_point_rec(gui_app.last_mouse_event.pos, rect)
-    pressed = enabled and self._pressed_target == ("header:primary" if emphasized else "header:secondary")
-    if emphasized:
-      bg = MODEL_PRIMARY if enabled else rl.Color(MODEL_PRIMARY.r, MODEL_PRIMARY.g, MODEL_PRIMARY.b, 80)
-      border = _with_alpha(MODEL_PRIMARY, 190 if enabled else 70)
-    else:
-      bg = rl.Color(255, 255, 255, 10 if enabled else 5)
-      border = rl.Color(255, 255, 255, 22 if enabled else 10)
-
-    if hovered:
-      bg = rl.Color(min(bg.r + 10, 255), min(bg.g + 10, 255), min(bg.b + 10, 255), bg.a)
-    if pressed:
-      bg = rl.Color(max(bg.r - 8, 0), max(bg.g - 8, 0), max(bg.b - 8, 0), bg.a)
-
-    rl.draw_rectangle_rounded(rect, 0.32, 16, bg)
-    rl.draw_rectangle_rounded_lines_ex(rect, 0.32, 16, 1, border)
-    label_color = MODEL_HEADER_TEXT if enabled else MODEL_MUTED
-    gui_label(rect, label, 24, label_color, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-
-  def _draw_chip(self, rect: rl.Rectangle, label: str, fill: rl.Color, border: rl.Color, text: rl.Color, pill: bool = False):
-    roundness = 1.0 if pill else 0.4
-    rl.draw_rectangle_rounded(rect, roundness, 18, fill)
-    rl.draw_rectangle_rounded_lines_ex(rect, roundness, 18, 1, _with_alpha(border, 110))
-    gui_label(rect, label, 20 if pill else 18, text, FontWeight.MEDIUM, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
-
   def _draw_scrollbar(self, rect: rl.Rectangle):
-    track_rect = rl.Rectangle(rect.x + rect.width - 7, rect.y + 8, 4, rect.height - 16)
-    rl.draw_rectangle_rounded(track_rect, 1.0, 12, MODEL_SCROLL_TRACK)
-
-    max_scroll = max(self._content_height - rect.height, 1.0)
-    thumb_height = max(46.0, track_rect.height * (rect.height / self._content_height))
-    thumb_range = max(track_rect.height - thumb_height, 0.0)
-    thumb_y = track_rect.y + (-self._scroll_offset / max_scroll) * thumb_range
-    thumb_rect = rl.Rectangle(track_rect.x, thumb_y, track_rect.width, thumb_height)
-    rl.draw_rectangle_rounded(thumb_rect, 1.0, 12, MODEL_SCROLL_THUMB)
+    self._scrollbar.render(rect, self._content_height, self._scroll_offset)
 
   def _row_transition_style(self, key: str) -> tuple[int, float, float]:
     if key not in self._transition_starts:
@@ -789,10 +868,12 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     ]
 
     if version == "v12":
-      files.extend([
-        f"{key}_driving_off_policy_tinygrad.pkl",
-        f"{key}_driving_off_policy_metadata.pkl",
-      ])
+      files.extend(
+        [
+          f"{key}_driving_off_policy_tinygrad.pkl",
+          f"{key}_driving_off_policy_metadata.pkl",
+        ]
+      )
 
     return files
 
@@ -841,8 +922,12 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     available_versions = [entry.strip() for entry in (self._params.get("ModelVersions", encoding="utf-8") or "").split(",")]
     released_dates = [entry.strip() for entry in (self._params.get("ModelReleasedDates", encoding="utf-8") or "").split(",")]
 
-    self._community_favorites = {canonical_model_key(entry.strip()) for entry in (self._params.get("CommunityFavorites", encoding="utf-8") or "").split(",") if entry.strip()}
-    self._user_favorites = {canonical_model_key(entry.strip()) for entry in (self._params.get("UserFavorites", encoding="utf-8") or "").split(",") if entry.strip()}
+    self._community_favorites = {
+      canonical_model_key(entry.strip()) for entry in (self._params.get("CommunityFavorites", encoding="utf-8") or "").split(",") if entry.strip()
+    }
+    self._user_favorites = {
+      canonical_model_key(entry.strip()) for entry in (self._params.get("UserFavorites", encoding="utf-8") or "").split(",") if entry.strip()
+    }
 
     size = min(len(available_models), len(available_names))
     for i in range(size):
@@ -941,23 +1026,29 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
 
   def installed_entries(self) -> list[ModelCatalogEntry]:
     entries = [entry for entry in self._catalog_entries.values() if entry.installed]
-    return sorted(entries, key=lambda entry: (
-      0 if self.is_current_model(entry.key) else 1,
-      0 if entry.builtin else 1,
-      0 if entry.user_favorite else 1,
-      0 if entry.community_favorite else 1,
-      self._model_file_to_name_processed.get(entry.key, entry.name).lower(),
-      entry.key,
-    ))
+    return sorted(
+      entries,
+      key=lambda entry: (
+        0 if self.is_current_model(entry.key) else 1,
+        0 if entry.builtin else 1,
+        0 if entry.user_favorite else 1,
+        0 if entry.community_favorite else 1,
+        self._model_file_to_name_processed.get(entry.key, entry.name).lower(),
+        entry.key,
+      ),
+    )
 
   def available_entries(self) -> list[ModelCatalogEntry]:
     entries = [entry for entry in self._catalog_entries.values() if not entry.installed]
-    return sorted(entries, key=lambda entry: (
-      0 if entry.user_favorite else 1,
-      0 if entry.community_favorite else 1,
-      self._model_file_to_name_processed.get(entry.key, entry.name).lower(),
-      entry.key,
-    ))
+    return sorted(
+      entries,
+      key=lambda entry: (
+        0 if entry.user_favorite else 1,
+        0 if entry.community_favorite else 1,
+        self._model_file_to_name_processed.get(entry.key, entry.name).lower(),
+        entry.key,
+      ),
+    )
 
   def is_current_model(self, model_key: str) -> bool:
     return canonical_model_key(model_key) == self._current_model_key
@@ -1022,7 +1113,7 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
       return tr("Refreshing the driving model catalog in the background.")
     if ui_state.started:
       return tr("Downloads and removals pause while driving.")
-    return tr("Tap an installed model to make it active.")
+    return tr("Tap a downloaded model to set it as active.")
 
   def empty_state_title(self) -> str:
     if self._manifest_fetch_thread is not None and self._manifest_fetch_thread.is_alive():
@@ -1039,40 +1130,44 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
 
     if self._params.get_bool("ModelRandomizer"):
       blacklist_count = len([m.strip() for m in (self._params.get("BlacklistedModels", encoding="utf-8") or "").split(",") if m.strip()])
-      rows.extend([
-        {
-          "id": "blacklist",
-          "title": tr("Blacklist"),
-          "subtitle": tr("Keep specific installed models out of the rotation."),
-          "type": "value",
-          "value": tr(f"{blacklist_count} blocked" if blacklist_count else "Manage"),
-        },
-        {
-          "id": "ratings",
-          "title": tr("Ratings"),
-          "subtitle": tr("Review recorded drives and model score history."),
-          "type": "value",
-          "value": tr("View"),
-        },
-      ])
+      rows.extend(
+        [
+          {
+            "id": "blacklist",
+            "title": tr("Blacklist"),
+            "subtitle": tr("Keep specific installed models out of the rotation."),
+            "type": "value",
+            "value": tr(f"{blacklist_count} blocked" if blacklist_count else "Manage"),
+          },
+          {
+            "id": "ratings",
+            "title": tr("Ratings"),
+            "subtitle": tr("Review recorded drives and model score history."),
+            "type": "value",
+            "value": tr("View"),
+          },
+        ]
+      )
 
     if self._params.get_int("TuningLevel") == 3:
-      rows.extend([
-        {
-          "id": "recovery_power",
-          "title": tr("Recovery Power"),
-          "subtitle": tr("How assertively the model recenters after disturbances."),
-          "type": "value",
-          "value": f"{self._params.get_float('RecoveryPower'):.1f}x",
-        },
-        {
-          "id": "stop_distance",
-          "title": tr("Stop Distance"),
-          "subtitle": tr("Preferred gap held at a complete stop."),
-          "type": "value",
-          "value": f"{self._params.get_float('StopDistance'):.1f}m",
-        },
-      ])
+      rows.extend(
+        [
+          {
+            "id": "recovery_power",
+            "title": tr("Recovery Power"),
+            "subtitle": tr("How assertively the model recenters after disturbances."),
+            "type": "value",
+            "value": f"{self._params.get_float('RecoveryPower'):.1f}x",
+          },
+          {
+            "id": "stop_distance",
+            "title": tr("Stop Distance"),
+            "subtitle": tr("Preferred gap held at a complete stop."),
+            "type": "value",
+            "value": f"{self._params.get_float('StopDistance'):.1f}m",
+          },
+        ]
+      )
 
     return rows
 
@@ -1184,19 +1279,37 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     self._update_model_metadata()
     return True
 
+  def toggle_favorite(self, model_key: str):
+    key = canonical_model_key(model_key)
+    current_favorites = {
+      canonical_model_key(m.strip())
+      for m in (self._params.get("UserFavorites", encoding="utf-8") or "").split(",")
+      if m.strip()
+    }
+    if key in current_favorites:
+      current_favorites.discard(key)
+    else:
+      current_favorites.add(key)
+    self._params.put("UserFavorites", ",".join(sorted(current_favorites)))
+    self._update_model_metadata()
+
   def _on_recovery_power_clicked(self):
     def on_close(res, val):
       if res == DialogResult.CONFIRM:
         self._params.put_float("RecoveryPower", float(val))
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr("Recovery Power"), 0.5, 2.0, 0.1, self._params.get_float("RecoveryPower"), on_close, unit="x", color="#597497"))
+    gui_app.set_modal_overlay(
+      AetherSliderDialog(tr("Recovery Power"), 0.5, 2.0, 0.1, self._params.get_float("RecoveryPower"), on_close, unit="x", color="#597497")
+    )
 
   def _on_stop_distance_clicked(self):
     def on_close(res, val):
       if res == DialogResult.CONFIRM:
         self._params.put_float("StopDistance", float(val))
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr("Stop Distance"), 4.0, 10.0, 0.1, self._params.get_float("StopDistance"), on_close, unit="m", color="#597497"))
+    gui_app.set_modal_overlay(
+      AetherSliderDialog(tr("Stop Distance"), 4.0, 10.0, 0.1, self._params.get_float("StopDistance"), on_close, unit="m", color="#597497")
+    )
 
   def _on_blacklist_clicked(self):
     blacklisted = [m.strip() for m in (self._params.get("BlacklistedModels", encoding="utf-8") or "").split(",") if m.strip()]
@@ -1236,6 +1349,14 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
 
   def _on_model_randomizer_toggled(self, state: bool):
     self._params.put_bool("ModelRandomizer", state)
+    update_starpilot_toggles()
+    self._update_model_metadata()
+
+  def toggle_model_randomizer(self):
+    self._on_model_randomizer_toggled(not self._params.get_bool("ModelRandomizer"))
+
+  def random_model_button_label(self) -> str:
+    return tr("Model Randomizer")
 
   def _update_state(self):
     if self._transient_status_text and time.monotonic() >= self._transient_status_until:
@@ -1250,6 +1371,7 @@ class StarPilotDrivingModelLayout(StarPilotPanel):
     is_downloading = bool(model_to_download or download_all)
 
     if is_downloading and (self._download_thread is None or not self._download_thread.is_alive()):
+
       def _download_task():
         try:
           if download_all:
