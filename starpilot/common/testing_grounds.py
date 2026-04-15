@@ -65,17 +65,16 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
   },
   {
     "id": TESTING_GROUND_6,
-    "name": "Silverado Trailer Mode",
-    "description": "Silverado/Sierra lateral A/B sandbox for trailer-related hugging and turn-in response.",
-    "aLabel": "A - Installed tune",
-    "bLabel": "B - Trailer assist tune",
-  },
-  {
-    "id": TESTING_GROUND_7,
     "name": "Unused",
     "description": "",
     "aLabel": "A",
-    "bLabel": "B",
+  },
+  {
+    "id": TESTING_GROUND_7,
+    "name": "Plexy's Car",
+    "description": "Volt lateral A/B sandbox for Plexy's baseline torque tuning.",
+    "aLabel": "A - Installed tune",
+    "bLabel": "B - Plexy baseline",
   },
 )
 

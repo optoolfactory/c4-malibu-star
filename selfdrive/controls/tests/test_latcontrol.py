@@ -26,9 +26,9 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_bolt_2018_2021_friction_scale,
   get_bolt_2018_2021_friction_threshold,
   get_bolt_2018_2021_torque_scale,
-  get_silverado_trailer_ff_scale,
-  get_silverado_trailer_friction_scale,
-  get_silverado_trailer_friction_threshold,
+  get_volt_plexy_ff_scale,
+  get_volt_plexy_friction_scale,
+  get_volt_plexy_friction_threshold,
 )
 
 
@@ -127,26 +127,27 @@ class TestLatControl:
     assert left_turn_in > right_turn_in > base
     assert base > right_unwind > left_unwind
 
-  def test_silverado_trailer_ff_scale_curve(self):
-    assert get_silverado_trailer_ff_scale(0.0, 0.0, 55.0 * 0.44704) == 1.0
-    assert get_silverado_trailer_ff_scale(0.7, 0.7, 60.0 * 0.44704) > get_silverado_trailer_ff_scale(-0.7, 0.7, 60.0 * 0.44704)
-    assert get_silverado_trailer_ff_scale(0.7, 0.7, 60.0 * 0.44704) > get_silverado_trailer_ff_scale(0.7, -0.7, 60.0 * 0.44704)
-    assert get_silverado_trailer_ff_scale(0.7, 0.7, 70.0 * 0.44704) < get_silverado_trailer_ff_scale(0.7, 0.7, 60.0 * 0.44704)
+  def test_volt_plexy_ff_scale_curve(self):
+    assert get_volt_plexy_ff_scale(0.0, 0.0, 20.0) == 1.0
+    assert get_volt_plexy_ff_scale(0.5, 0.0, 20.0) > get_volt_plexy_ff_scale(-0.5, 0.0, 20.0)
+    assert get_volt_plexy_ff_scale(0.6, 0.7, 8.0) > get_volt_plexy_ff_scale(0.6, 0.0, 8.0) > get_volt_plexy_ff_scale(0.6, -0.7, 8.0)
+    assert get_volt_plexy_ff_scale(-0.6, -0.7, 8.0) > get_volt_plexy_ff_scale(-0.6, 0.0, 8.0) > get_volt_plexy_ff_scale(-0.6, 0.7, 8.0)
+    assert get_volt_plexy_ff_scale(2.0, 0.0, 20.0) < get_volt_plexy_ff_scale(0.8, 0.0, 20.0)
 
-  def test_silverado_trailer_friction_threshold_curve(self):
-    base = get_friction_threshold(60.0 * 0.44704)
-    left_turn_in = get_silverado_trailer_friction_threshold(60.0 * 0.44704, 0.7, 0.8)
-    right_turn_in = get_silverado_trailer_friction_threshold(60.0 * 0.44704, -0.7, -0.8)
-    left_unwind = get_silverado_trailer_friction_threshold(60.0 * 0.44704, 0.7, -0.8)
-    right_unwind = get_silverado_trailer_friction_threshold(60.0 * 0.44704, -0.7, 0.8)
+  def test_volt_plexy_friction_threshold_curve(self):
+    base = get_friction_threshold(6.0)
+    left_turn_in = get_volt_plexy_friction_threshold(6.0, 0.7, 0.8)
+    right_turn_in = get_volt_plexy_friction_threshold(6.0, -0.7, -0.8)
+    left_unwind = get_volt_plexy_friction_threshold(6.0, 0.7, -0.8)
+    right_unwind = get_volt_plexy_friction_threshold(6.0, -0.7, 0.8)
     assert left_turn_in < right_turn_in < base < left_unwind < right_unwind
 
-  def test_silverado_trailer_friction_scale_curve(self):
-    base = get_silverado_trailer_friction_scale(60.0 * 0.44704, 0.7, 0.0)
-    left_turn_in = get_silverado_trailer_friction_scale(60.0 * 0.44704, 0.7, 0.8)
-    right_turn_in = get_silverado_trailer_friction_scale(60.0 * 0.44704, -0.7, -0.8)
-    left_unwind = get_silverado_trailer_friction_scale(60.0 * 0.44704, 0.7, -0.8)
-    right_unwind = get_silverado_trailer_friction_scale(60.0 * 0.44704, -0.7, 0.8)
+  def test_volt_plexy_friction_scale_curve(self):
+    base = get_volt_plexy_friction_scale(25.0, 0.7, 0.8)
+    left_turn_in = get_volt_plexy_friction_scale(6.0, 0.7, 0.8)
+    right_turn_in = get_volt_plexy_friction_scale(6.0, -0.7, -0.8)
+    left_unwind = get_volt_plexy_friction_scale(6.0, 0.7, -0.8)
+    right_unwind = get_volt_plexy_friction_scale(6.0, -0.7, 0.8)
     assert left_turn_in > right_turn_in > base
     assert base > left_unwind > right_unwind
 
@@ -171,9 +172,9 @@ class TestLatControl:
 
     assert lac_log.active
 
-  def test_silverado_trailer_testing_ground_update_path(self, monkeypatch):
-    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_SILVERADO)
-    monkeypatch.setattr(latcontrol_torque, "silverado_trailer_lateral_testing_ground_active", lambda: True)
+  def test_volt_plexy_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(GM.CHEVROLET_VOLT_CC)
+    monkeypatch.setattr(latcontrol_torque, "volt_plexy_lateral_testing_ground_active", lambda: True)
 
     _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
 
