@@ -60,6 +60,39 @@ def _get_param_str(params: Params, key: str, default: str = "") -> str:
   return str(val)
 
 
+def _get_default_param_str(params: Params, key: str) -> str:
+  try:
+    val = params.get_default_value(key)
+  except Exception:
+    return ""
+  if val is None:
+    return ""
+  if isinstance(val, bytes):
+    try:
+      return val.decode("utf-8")
+    except Exception:
+      return ""
+  return str(val)
+
+
+def _resolve_mirrored_param(params: Params, primary_key: str, secondary_key: str) -> str:
+  primary_val = _get_param_str(params, primary_key).strip()
+  secondary_val = _get_param_str(params, secondary_key).strip()
+  if primary_val == secondary_val:
+    return secondary_val or primary_val
+
+  primary_default = _get_default_param_str(params, primary_key).strip()
+  secondary_default = _get_default_param_str(params, secondary_key).strip()
+  primary_non_default = bool(primary_val) and primary_val != primary_default
+  secondary_non_default = bool(secondary_val) and secondary_val != secondary_default
+
+  if secondary_non_default:
+    return secondary_val
+  if primary_non_default:
+    return primary_val
+  return secondary_val or primary_val
+
+
 def _canonical_model_id(model_id: str) -> str:
   key = (model_id or "").strip().lower()
   return BUILTIN_MODEL_KEY if key in BUILTIN_MODEL_ALIASES else key
@@ -72,10 +105,12 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
       recovery_power = getattr(starpilot_toggles, "recovery_power", 1.0)
       plan = plan + recovery_power * model_output['planplus'][0]
       cloudlog.error(f"planplus applied: shape {model_output['planplus'].shape}, RECOVERY_POWER {recovery_power}")
+    v_ego_stopping = getattr(starpilot_toggles, "vEgoStopping", 0.3)
     desired_accel, should_stop = get_accel_from_plan_tomb_raider(plan[:,Plan.VELOCITY][:,0],
                                                                  plan[:,Plan.ACCELERATION][:,0],
                                                                  ModelConstants.T_IDXS,
-                                                                 action_t=long_action_t)
+                                                                 action_t=long_action_t,
+                                                                 vEgoStopping=v_ego_stopping)
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
 
     if is_v9:
@@ -141,14 +176,10 @@ class ModelState:
   def __init__(self, context: CLContext):
     # Dynamically build paths based on current model ID
     params = Params()
-    model_id_raw = _get_param_str(params, "Model")
-    if not model_id_raw:
-      model_id_raw = _get_param_str(params, "DrivingModel", BUILTIN_MODEL_KEY)
+    model_id_raw = _resolve_mirrored_param(params, "Model", "DrivingModel") or BUILTIN_MODEL_KEY
     model_id = _canonical_model_id(model_id_raw)
 
-    model_version = _get_param_str(params, "ModelVersion")
-    if not model_version:
-      model_version = _get_param_str(params, "DrivingModelVersion")
+    model_version = _resolve_mirrored_param(params, "ModelVersion", "DrivingModelVersion")
 
     model_dir = MODELS_PATH
     use_builtin_model = model_id == BUILTIN_MODEL_KEY

@@ -7,6 +7,7 @@ QMap<int, QString> getWheelFunctionsMap() {
     {0, QObject::tr("No Action")},
     {3, QObject::tr("Pause Steering")},
     {7, QObject::tr("Toggle \"Switchback Mode\" On/Off")},
+    {8, QObject::tr("Create Bookmark")},
   };
 }
 
@@ -56,7 +57,13 @@ StarPilotWheelPanel::StarPilotWheelPanel(StarPilotSettingsWindow *parent, bool f
     {"DistanceButtonControl", tr("Distance Button"), tr("<b>Action performed when the \"Distance\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
     {"LongDistanceButtonControl", tr("Distance Button (Long Press)"), tr("<b>Action performed when the \"Distance\" button is pressed for more than 0.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
     {"VeryLongDistanceButtonControl", tr("Distance Button (Very Long Press)"), tr("<b>Action performed when the \"Distance\" button is pressed for more than 2.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
-    {"LKASButtonControl", tr("LKAS Button"), tr("<b>Action performed when the \"LKAS\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"}
+    {"LKASButtonControl", tr("LKAS Button"), tr("<b>Action performed when the \"LKAS\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"ModeButtonControl", tr("Mode Button"), tr("<b>Action performed when the \"Mode\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"LongModeButtonControl", tr("Mode Button (Long Press)"), tr("<b>Action performed when the \"Mode\" button is pressed for more than 0.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"VeryLongModeButtonControl", tr("Mode Button (Very Long Press)"), tr("<b>Action performed when the \"Mode\" button is pressed for more than 2.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"StarButtonControl", tr("Star Button"), tr("<b>Action performed when the \"Star\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"LongStarButtonControl", tr("Star Button (Long Press)"), tr("<b>Action performed when the \"Star\" button is pressed for more than 0.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
+    {"VeryLongStarButtonControl", tr("Star Button (Very Long Press)"), tr("<b>Action performed when the \"Star\" button is pressed for more than 2.5 seconds.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"}
   };
 
   for (const auto &[param, title, desc, icon] : wheelToggles) {
@@ -119,6 +126,16 @@ void StarPilotWheelPanel::updateToggles() {
     if (!showAllToggles && key == "LKASButtonControl") {
       setVisible &= !parent->isSubaru;
       setVisible &= !parent->lkasAllowedForAOL || !(params.getBool("AlwaysOnLateral") && params.getBool("AlwaysOnLateralLKAS"));
+    }
+
+    if (!showAllToggles && (
+        key == "ModeButtonControl" ||
+        key == "LongModeButtonControl" ||
+        key == "VeryLongModeButtonControl" ||
+        key == "StarButtonControl" ||
+        key == "LongStarButtonControl" ||
+        key == "VeryLongStarButtonControl")) {
+      setVisible &= parent->hasModeStarButtons;
     }
 
     if (ButtonControl *wheelToggle = qobject_cast<ButtonControl*>(toggle)) {

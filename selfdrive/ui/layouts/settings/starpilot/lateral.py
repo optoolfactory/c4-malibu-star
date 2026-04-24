@@ -105,21 +105,21 @@ class StarPilotAdvancedLateralLayout(StarPilotPanel):
       if res == DialogResult.CONFIRM:
         self._params.put_float(key, float(val))
         self._rebuild_grid()
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
 
   def _on_reboot_toggle(self, key, state):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
       dialog = ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None)
-      gui_app.set_modal_overlay(dialog)
+      gui_app.push_widget(dialog)
 
 class StarPilotAlwaysOnLateralLayout(StarPilotPanel):
   def __init__(self):
     super().__init__()
     self.CATEGORIES = [
       {"title": tr_noop("Always On Lateral"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateral"), "set_state": lambda x: self._on_reboot_toggle("AlwaysOnLateral", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497"},
-      {"title": tr_noop("Enable With LKAS"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateralLKAS"), "set_state": lambda x: self._params.put_bool("AlwaysOnLateralLKAS", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497", "visible": lambda: self._params.get_bool("AlwaysOnLateral")},
+      {"title": tr_noop("Enable With LKAS"), "type": "toggle", "get_state": lambda: self._params.get_bool("AlwaysOnLateralLKAS"), "set_state": lambda x: self._params.put_bool("AlwaysOnLateralLKAS", x), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497", "visible": lambda: self._params.get_bool("AlwaysOnLateral") and starpilot_state.car_state.lkasAllowedForAOL},
       {"title": tr_noop("Pause Below"), "type": "value", "get_value": lambda: f"{self._params.get_int('PauseAOLOnBrake')} mph", "on_click": lambda: self._show_speed_selector("PauseAOLOnBrake"), "icon": "toggle_icons/icon_always_on_lateral.png", "color": "#597497", "visible": lambda: self._params.get_bool("AlwaysOnLateral")},
     ]
     self._rebuild_grid()
@@ -129,13 +129,13 @@ class StarPilotAlwaysOnLateralLayout(StarPilotPanel):
       if res == DialogResult.CONFIRM:
         self._params.put_int(key, int(val))
         self._rebuild_grid()
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
 
   def _on_reboot_toggle(self, key, state):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
-      gui_app.set_modal_overlay(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
+      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
 
 class StarPilotLaneChangesLayout(StarPilotPanel):
   def __init__(self):
@@ -147,6 +147,7 @@ class StarPilotLaneChangesLayout(StarPilotPanel):
       {"title": tr_noop("Min Lane Change Speed"), "type": "value", "get_value": lambda: f"{self._params.get_int('MinimumLaneChangeSpeed')} mph", "on_click": lambda: self._show_speed_selector("MinimumLaneChangeSpeed"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
       {"title": tr_noop("Minimum Lane Width"), "type": "value", "get_value": lambda: f"{self._params.get_float('LaneDetectionWidth'):.1f} ft", "on_click": lambda: self._show_float_selector("LaneDetectionWidth", 0.0, 15.0, 0.1, " ft"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges") and self._params.get_bool("NudgelessLaneChange")},
       {"title": tr_noop("One Lane Change Per Signal"), "type": "toggle", "get_state": lambda: self._params.get_bool("OneLaneChange"), "set_state": lambda s: self._params.put_bool("OneLaneChange", s), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
+      {"title": tr_noop("Lane Change Smoothing"), "desc": tr_noop("How smoothly openpilot commits to a lane change. 10 is stock; lower values produce a gentler, more gradual maneuver."), "type": "value", "get_value": lambda: f"{self._params.get_int('LaneChangeSmoothing')}", "on_click": lambda: self._show_pace_selector("LaneChangeSmoothing"), "icon": "toggle_icons/icon_lane.png", "color": "#597497", "visible": lambda: self._params.get_bool("LaneChanges")},
     ]
     self._rebuild_grid()
 
@@ -155,14 +156,22 @@ class StarPilotLaneChangesLayout(StarPilotPanel):
       if res == DialogResult.CONFIRM:
         self._params.put_int(key, int(val))
         self._rebuild_grid()
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
 
   def _show_float_selector(self, key, min_v, max_v, step, unit=""):
     def on_close(res, val):
       if res == DialogResult.CONFIRM:
         self._params.put_float(key, float(val))
         self._rebuild_grid()
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
+
+  def _show_pace_selector(self, key):
+    def on_close(res, val):
+      if res == DialogResult.CONFIRM:
+        self._params.put_int(key, int(val))
+        self._rebuild_grid()
+    current = self._params.get_int(key) if self._params.get_int(key) > 0 else 10
+    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 1, 10, 1, current, on_close, color="#597497"))
 
 class StarPilotLateralTuneLayout(StarPilotPanel):
   def __init__(self):
@@ -192,7 +201,7 @@ class StarPilotLateralTuneLayout(StarPilotPanel):
     self._params.put_bool(key, state)
     from openpilot.selfdrive.ui.ui_state import ui_state
     if ui_state.started:
-      gui_app.set_modal_overlay(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
+      gui_app.push_widget(ConfirmDialog(tr("Reboot required. Reboot now?"), tr("Reboot"), tr("Cancel"), on_close=lambda res: HARDWARE.reboot() if res == DialogResult.CONFIRM else None))
 
 class StarPilotLateralQOLLayout(StarPilotPanel):
   def __init__(self):
@@ -208,7 +217,7 @@ class StarPilotLateralQOLLayout(StarPilotPanel):
       if res == DialogResult.CONFIRM:
         self._params.put_int(key, int(val))
         self._rebuild_grid()
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
 
 class StarPilotLateralLayout(StarPilotPanel):
   def __init__(self):

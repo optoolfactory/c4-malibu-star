@@ -2,6 +2,11 @@ import { html, reactive } from "/assets/vendor/arrow-core.js"
 
 const endpointOptionsCache = {}
 const endpointOptionsInflight = {}
+const COLOR_UI_DEFAULTS = {
+  LaneLinesColor: "#00ff00",
+  PathEdgesColor: "#00ff00",
+  PathColor: "#30ff9c",
+}
 
 // Plain variables — scheduling/routing flags that must NOT be reactive
 let syncScheduled = false
@@ -38,8 +43,62 @@ function getSectionsWithSlug() {
   }))
 }
 
+function isGroupParam(param) {
+  return !!param && param.ui_type === "group"
+}
+
+function isParamEnabledForChildren(paramOrKey) {
+  const isKey = typeof paramOrKey === "string"
+  const param = isKey ? state.paramMetaByKey[paramOrKey] : paramOrKey
+  if (isGroupParam(param)) return true
+
+  const key = isKey ? paramOrKey : (param && param.key)
+  return !!(key && state.values[key])
+}
+
+function getEventValue(event) {
+  const source = event && (event.currentTarget || event.target)
+  if (!source || !("value" in source)) return ""
+  return String(source.value || "")
+}
+
+function updateSearchFilter(event) {
+  const nextFilter = getEventValue(event)
+  if (state.filter === nextFilter) return
+  state.filter = nextFilter
+  scheduleSyncInputs()
+}
+
 function toSelectValue(value) {
   return value === null || value === undefined ? "" : String(value)
+}
+
+function normalizeHexColor(rawValue) {
+  const value = String(rawValue || "").trim()
+  if (!value || value.toLowerCase() === "stock") return ""
+
+  const stripped = value.startsWith("#") ? value.slice(1) : value
+  if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(stripped)) return ""
+  return `#${stripped.slice(0, 6).toLowerCase()}`
+}
+
+function getColorDefault(param) {
+  const candidate = normalizeHexColor(param?.default_color)
+  if (candidate) return candidate
+  return COLOR_UI_DEFAULTS[param?.key] || "#ffffff"
+}
+
+function resolveColorInputValue(param, rawValue = undefined) {
+  return normalizeHexColor(rawValue ?? state.values[param?.key]) || getColorDefault(param)
+}
+
+function formatColorDisplayValue(param, rawValue = undefined) {
+  const value = normalizeHexColor(rawValue ?? state.values[param?.key])
+  return value ? value.toUpperCase() : "Stock"
+}
+
+function isStockColorValue(rawValue) {
+  return normalizeHexColor(rawValue) === ""
 }
 
 function resolveEndpointTemplate(template) {
@@ -68,11 +127,34 @@ function applySelectOptions(el, options) {
   }
 }
 
+function syncSelectValue(el, key) {
+  const targetValue = toSelectValue(state.values[key])
+  if (!targetValue) {
+    el.value = ""
+    return
+  }
+
+  if (key === "CarModel") {
+    const targetLabel = toSelectValue(state.values.CarModelName)
+    const options = Array.from(el.options)
+    const matchingIndex = options.findIndex(opt => {
+      if (opt.value !== targetValue) return false
+      return !targetLabel || opt.textContent === targetLabel
+    })
+    if (matchingIndex !== -1) {
+      el.selectedIndex = matchingIndex
+      return
+    }
+  }
+
+  el.value = targetValue
+}
+
 async function hydrateEndpointOptions(el, key, endpoint) {
   if (endpointOptionsCache[endpoint]) {
     applySelectOptions(el, endpointOptionsCache[endpoint])
     el.dataset.hydrated = "1"
-    el.value = toSelectValue(state.values[key])
+    syncSelectValue(el, key)
     return
   }
 
@@ -94,13 +176,21 @@ async function hydrateEndpointOptions(el, key, endpoint) {
 
   applySelectOptions(el, options)
   el.dataset.hydrated = "1"
-  el.value = toSelectValue(state.values[key])
+  syncSelectValue(el, key)
 }
 
 function syncInputs() {
   // Sync checkboxes — set DOM property directly (attribute alone is unreliable)
   for (const el of document.querySelectorAll("input[type='checkbox'].ds-toggle[id^='ds-']")) {
     el.checked = !!state.values[el.id.slice(3)]
+  }
+
+  // Sync color inputs — map unset/"stock" values to the picker fallback color.
+  for (const el of document.querySelectorAll("input[type='color'].ds-color[id^='ds-']")) {
+    const key = el.id.slice(3)
+    const param = state.paramMetaByKey[key]
+    if (!param) continue
+    el.value = resolveColorInputValue(param)
   }
 
   // Sync selects — hydrate options + set value
@@ -115,7 +205,7 @@ function syncInputs() {
         el.dataset.endpoint = endpoint
         hydrateEndpointOptions(el, key, endpoint)
       } else {
-        el.value = toSelectValue(state.values[key])
+        syncSelectValue(el, key)
       }
       continue
     }
@@ -125,7 +215,7 @@ function syncInputs() {
         applySelectOptions(el, inlineOptions)
         el.dataset.hydrated = "1"
       }
-      el.value = toSelectValue(state.values[key])
+      syncSelectValue(el, key)
     }
   }
 }
@@ -513,12 +603,16 @@ async function updateParam(key, elType) {
   if (!el) return
 
   const param = state.paramMetaByKey[key] || {}
+  let selectedLabel = ""
 
   let formattedVal
   if (elType === "checkbox") {
     formattedVal = !!el.checked
   } else if (elType === "dropdown") {
     formattedVal = coerceValueByType(el.value, param.data_type)
+    selectedLabel = el.options?.[el.selectedIndex]?.textContent || ""
+  } else if (elType === "color") {
+    formattedVal = normalizeHexColor(el.value) || getColorDefault(param)
   } else {
     formattedVal = coerceValueByType(el.value, param.data_type)
   }
@@ -527,7 +621,7 @@ async function updateParam(key, elType) {
     const res = await fetch("/api/params", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value: formattedVal }),
+      body: JSON.stringify({ key, value: formattedVal, label: selectedLabel }),
     })
     const data = await res.json()
 
@@ -564,7 +658,44 @@ function revertInput(key, current, elType) {
     return
   }
 
+  if (elType === "color") {
+    const param = state.paramMetaByKey[key]
+    if (!param) return
+    el.value = resolveColorInputValue(param, current)
+    return
+  }
+
   el.value = current
+}
+
+async function resetColorParam(param) {
+  const key = param?.key
+  if (!key) return
+
+  const current = state.values[key]
+  if (isStockColorValue(current)) return
+
+  try {
+    const res = await fetch("/api/params", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value: "stock" }),
+    })
+    const data = await res.json()
+
+    if (res.ok) {
+      const updated = (data.updated && typeof data.updated === "object") ? data.updated : {}
+      state.values = { ...state.values, [key]: "stock", ...updated }
+      showParamSnackbar(data.message || `Parameter '${key}' reset to stock.`)
+      scheduleSyncInputs()
+    } else {
+      showParamSnackbar(data.error || "Failed to reset parameter", "error")
+      revertInput(key, current, "color")
+    }
+  } catch (e) {
+    showParamSnackbar("Network error — is the device reachable?", "error")
+    revertInput(key, current, "color")
+  }
 }
 
 function toggleManage(key) {
@@ -574,8 +705,12 @@ function toggleManage(key) {
 
 function matchesFilter(p) {
   if (!state.filter) return true
+  if (isGroupParam(p)) return false
   const q = state.filter.toLowerCase()
-  return p.label.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)
+  const label = String(p.label || "").toLowerCase()
+  const key = String(p.key || "").toLowerCase()
+  const description = String(p.description || "").toLowerCase()
+  return label.includes(q) || key.includes(q) || description.includes(q)
 }
 
 function clearSearchFilter() {
@@ -610,14 +745,114 @@ function handleSectionTabClick(sectionSlug, event) {
 
 function renderSettingRow(p) {
   if (p.parent_key && !state.filter) {
-    if (!state.values[p.parent_key]) return ""
+    if (!isParamEnabledForChildren(p.parent_key)) return ""
     if (!state.expanded[p.parent_key]) return ""
   }
 
   const isNumeric = p.ui_type === "numeric"
+  const isColor = p.ui_type === "color"
+  const isGroup = isGroupParam(p)
   const isChild = p.parent_key ? "ds-child-modifier" : ""
   const lockReason = getSettingLockReason(p)
   const isLocked = lockReason !== ""
+  let rowControl = ""
+
+  if (isNumeric) {
+    rowControl = html`
+      <div class="ds-stepper-container">
+        ${(() => {
+      const bounds = numericBounds(p)
+      const currentNumeric = resolveCurrentNumericValue(p, bounds)
+      const precision = stepPrecision(bounds.step, p.precision)
+      const epsilon = Math.pow(10, -(precision + 2))
+      const updating = isNumericUpdating(p.key)
+      const canDecrease = !updating && currentNumeric > (Number(bounds.min) + epsilon)
+      const canIncrease = !updating && currentNumeric < (Number(bounds.max) - epsilon)
+      const defaultNumeric = resolveDefaultNumericValue(p, bounds)
+      const defaultLabel = defaultNumeric !== null
+        ? formatSliderValue(defaultNumeric, String(bounds.step), p.precision, p.key)
+        : "N/A"
+      const canReset = !updating && defaultNumeric !== null && Math.abs(defaultNumeric - currentNumeric) > epsilon
+      const stepLabel = formatStepValue(bounds.step, precision)
+      return html`
+            <div class="ds-stepper">
+              <button
+                class="ds-stepper-btn"
+                disabled="${() => !canDecrease || false}"
+                @click="${() => stepNumericParam(p, -1)}">-</button>
+              <div class="ds-stepper-meta">
+                <span>${formatSliderValue(bounds.min, String(bounds.step), p.precision, p.key)} to ${formatSliderValue(bounds.max, String(bounds.step), p.precision, p.key)}</span>
+                <span class="ds-step-value">Step: ${stepLabel} per click</span>
+                <span class="ds-default-value">Default: ${defaultLabel}</span>
+                <div class="ds-manual-row">
+                  <input
+                    type="number"
+                    class="ds-manual-input"
+                    id="ds-manual-${p.key}"
+                    min="${bounds.min}"
+                    max="${bounds.max}"
+                    step="${bounds.step}"
+                    disabled="${() => updating}"
+                    value="${() => formatNumericForInput(resolveCurrentNumericValue(p, numericBounds(p)), precision)}"
+                    @keydown="${(e) => {
+                      if (e.key !== "Enter") return
+                      e.preventDefault()
+                      applyManualNumericParam(p)
+                    }}" />
+                  <button
+                    class="ds-apply-btn"
+                    disabled="${() => updating}"
+                    @click="${() => applyManualNumericParam(p)}">Apply</button>
+                </div>
+                <button
+                  class="ds-reset-btn"
+                  disabled="${() => !canReset || false}"
+                  @click="${() => resetNumericParam(p)}">Reset to Default</button>
+              </div>
+              <button
+                class="ds-stepper-btn"
+                disabled="${() => !canIncrease || false}"
+                @click="${() => stepNumericParam(p, 1)}">+</button>            </div>
+          `
+    })()}
+      </div>
+    `
+  } else if (p.ui_type === "dropdown") {
+    rowControl = html`
+      <select
+        class="ds-select"
+        id="ds-${p.key}"
+        data-endpoint="${p.options_endpoint || ""}"
+        disabled="${() => isLocked}"
+        @change="${() => updateParam(p.key, "dropdown")}">
+        <option value="">Loading...</option>
+      </select>
+    `
+  } else if (p.ui_type === "color") {
+    rowControl = html`
+      <div style="display:flex; align-items:center; gap:0.75rem;">
+        <input
+          type="color"
+          class="ds-color"
+          id="ds-${p.key}"
+          disabled="${() => isLocked}"
+          value="${() => resolveColorInputValue(p)}"
+          @change="${() => updateParam(p.key, "color")}" />
+        <button
+          class="ds-reset-btn"
+          disabled="${() => isLocked || isStockColorValue(state.values[p.key])}"
+          @click="${() => resetColorParam(p)}">Stock</button>
+      </div>
+    `
+  } else if (!isGroup) {
+    rowControl = html`
+      <input
+        type="checkbox"
+        class="ds-toggle"
+        id="ds-${p.key}"
+        @change="${() => updateParam(p.key, "checkbox")}" />
+    `
+  }
 
   return html`
     <div class="ds-row ${isNumeric ? "ds-row-numeric" : ""} ${isChild}">
@@ -627,94 +862,22 @@ function renderSettingRow(p) {
           ${p.description ? html`<div class="ds-row-desc">${p.description}</div>` : ""}
           ${lockReason ? html`<div class="ds-row-desc"><strong>Locked:</strong> ${lockReason}</div>` : ""}
 
-          ${() => p.is_parent_toggle && state.values[p.key] ? html`
+          ${() => p.is_parent_toggle && isParamEnabledForChildren(p) ? html`
             <div class="ds-manage-btn" @click="${() => toggleManage(p.key)}">
               ${state.expanded[p.key] ? "Close" : "Manage"}
               <i class="bi bi-chevron-${state.expanded[p.key] ? "up" : "down"}"></i>
             </div>
           ` : ""}
         </div>
-        ${isNumeric ? html`<span class="ds-row-value" id="ds-display-${p.key}">${() => {
+        ${(isNumeric || isColor) ? html`<span class="ds-row-value" id="ds-display-${p.key}">${() => {
+            if (isColor) return formatColorDisplayValue(p)
             const currentValue = state.values[p.key]
             const bounds = numericBounds(p)
             return currentValue !== undefined ? formatSliderValue(currentValue, String(bounds.step), p.precision, p.key) : ".."
           }}</span>` : ""}
       </div>
 
-      ${isNumeric ? html`
-        <div class="ds-stepper-container">
-          ${(() => {
-        const bounds = numericBounds(p)
-        const currentNumeric = resolveCurrentNumericValue(p, bounds)
-        const precision = stepPrecision(bounds.step, p.precision)
-        const epsilon = Math.pow(10, -(precision + 2))
-        const updating = isNumericUpdating(p.key)
-        const canDecrease = !updating && currentNumeric > (Number(bounds.min) + epsilon)
-        const canIncrease = !updating && currentNumeric < (Number(bounds.max) - epsilon)
-        const defaultNumeric = resolveDefaultNumericValue(p, bounds)
-        const defaultLabel = defaultNumeric !== null
-          ? formatSliderValue(defaultNumeric, String(bounds.step), p.precision, p.key)
-          : "N/A"
-        const canReset = !updating && defaultNumeric !== null && Math.abs(defaultNumeric - currentNumeric) > epsilon
-        const stepLabel = formatStepValue(bounds.step, precision)
-        return html`
-              <div class="ds-stepper">
-                <button
-                  class="ds-stepper-btn"
-                  disabled="${() => !canDecrease || false}"
-                  @click="${() => stepNumericParam(p, -1)}">-</button>
-                <div class="ds-stepper-meta">
-                  <span>${formatSliderValue(bounds.min, String(bounds.step), p.precision, p.key)} to ${formatSliderValue(bounds.max, String(bounds.step), p.precision, p.key)}</span>
-                  <span class="ds-step-value">Step: ${stepLabel} per click</span>
-                  <span class="ds-default-value">Default: ${defaultLabel}</span>
-                  <div class="ds-manual-row">
-                    <input
-                      type="number"
-                      class="ds-manual-input"
-                      id="ds-manual-${p.key}"
-                      min="${bounds.min}"
-                      max="${bounds.max}"
-                      step="${bounds.step}"
-                      ?disabled="${updating}"
-                      value="${() => formatNumericForInput(resolveCurrentNumericValue(p, numericBounds(p)), precision)}"
-                      @keydown="${(e) => {
-                        if (e.key !== "Enter") return
-                        e.preventDefault()
-                        applyManualNumericParam(p)
-                      }}" />
-                    <button
-                      class="ds-apply-btn"
-                      ?disabled="${updating}"
-                      @click="${() => applyManualNumericParam(p)}">Apply</button>
-                  </div>
-                  <button
-                    class="ds-reset-btn"
-                    disabled="${() => !canReset || false}"
-                    @click="${() => resetNumericParam(p)}">Reset to Default</button>
-                </div>
-                <button
-                  class="ds-stepper-btn"
-                  disabled="${() => !canIncrease || false}"
-                  @click="${() => stepNumericParam(p, 1)}">+</button>              </div>
-            `
-      })()}
-        </div>
-      ` : p.ui_type === "dropdown" ? html`
-        <select
-          class="ds-select"
-          id="ds-${p.key}"
-          data-endpoint="${p.options_endpoint || ""}"
-          ?disabled="${isLocked}"
-          @change="${() => updateParam(p.key, "dropdown")}">
-          <option value="">Loading...</option>
-        </select>
-      ` : html`
-        <input
-          type="checkbox"
-          class="ds-toggle"
-          id="ds-${p.key}"
-          @change="${() => updateParam(p.key, "checkbox")}" />
-      `}
+      ${rowControl}
     </div>
   `
 }
@@ -732,7 +895,7 @@ function renderSettingTree(paramsList, parentKey = null) {
     if (row) rendered.push(row)
 
     if (!hasChildParams(paramsList, param.key)) continue
-    if (!state.values[param.key] || !state.expanded[param.key]) continue
+    if (!isParamEnabledForChildren(param) || !state.expanded[param.key]) continue
 
     rendered.push(...renderSettingTree(paramsList, param.key))
   }
@@ -781,10 +944,8 @@ export function DeviceSettings({ params }) {
           @keydown="${(e) => {
             if (e.key === "Escape") clearSearchFilter()
           }}"
-          @input="${(e) => {
-            state.filter = e.target.value
-            scheduleSyncInputs()
-          }}" />
+          @input="${updateSearchFilter}"
+          @change="${updateSearchFilter}" />
         ${() => state.filter ? html`
           <button
             class="ds-search-clear"

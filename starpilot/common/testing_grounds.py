@@ -61,15 +61,17 @@ TESTING_GROUNDS_SLOT_DEFINITIONS = (
   },
   {
     "id": TESTING_GROUND_5,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
+    "name": "Ioniq 6 Lateral",
+    "description": "Hyundai Ioniq 6 lateral sandbox.",
+    "aLabel": "A - Installed tune",
+    "cLabel": "C - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_6,
-    "name": "Unused",
-    "description": "",
-    "aLabel": "A",
+    "name": "Kia EV6 Lateral",
+    "description": "Kia EV6 lateral sandbox.",
+    "aLabel": "A - Installed tune",
+    "cLabel": "C - Firestar Tune",
   },
   {
     "id": TESTING_GROUND_7,

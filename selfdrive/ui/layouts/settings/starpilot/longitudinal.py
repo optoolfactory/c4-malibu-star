@@ -240,7 +240,7 @@ class StarPilotAdvancedLongitudinalLayout(StarPilotPanel):
         self._params.put_float(key, float(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotConditionalExperimentalLayout(StarPilotPanel):
@@ -372,7 +372,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), 0, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
 
   def _show_int_selector(self, key, min_v, max_v, unit=""):
     def on_close(res, val):
@@ -380,7 +380,7 @@ class StarPilotConditionalExperimentalLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotCurveSpeedLayout(StarPilotPanel):
@@ -441,7 +441,7 @@ class StarPilotCurveSpeedLayout(StarPilotPanel):
         self._params.remove("CurvatureData")
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(ConfirmDialog(tr("Reset Curve Data?"), tr("Confirm"), on_close=on_close))
+    gui_app.push_widget(ConfirmDialog(tr("Reset Curve Data?"), tr("Confirm"), on_close=on_close))
 
 
 class StarPilotPersonalitiesLayout(StarPilotPanel):
@@ -537,7 +537,7 @@ class StarPilotPersonalityProfileLayout(StarPilotPanel):
           self._params.remove(self._profile + key)
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(ConfirmDialog(tr("Reset to Defaults?"), tr("Confirm"), on_close=on_close))
+    gui_app.push_widget(ConfirmDialog(tr("Reset to Defaults?"), tr("Confirm"), on_close=on_close))
 
   def _show_float_selector(self, key, min_v, max_v, step, unit=""):
     def on_close(res, val):
@@ -545,7 +545,7 @@ class StarPilotPersonalityProfileLayout(StarPilotPanel):
         self._params.put_float(key, float(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, step, self._params.get_float(key), on_close, unit=unit, color="#597497"))
 
   def _show_int_selector(self, key, min_v, max_v, unit=""):
     def on_close(res, val):
@@ -553,7 +553,7 @@ class StarPilotPersonalityProfileLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, 5, self._params.get_int(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, 5, self._params.get_int(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotLongitudinalTuneLayout(StarPilotPanel):
@@ -593,6 +593,15 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         "type": "toggle",
         "get_state": lambda: self._params.get_bool("HumanFollowing"),
         "set_state": lambda s: self._params.put_bool("HumanFollowing", s),
+        "color": "#597497",
+        "visible": self._longitudinal_enabled,
+      },
+      {
+        "title": tr_noop("Coast Up To Leads"),
+        "desc": tr_noop("Allow openpilot to briefly coast toward far leads before applying normal throttle again."),
+        "type": "toggle",
+        "get_state": lambda: self._params.get_bool("CoastUpToLeads"),
+        "set_state": lambda s: self._params.put_bool("CoastUpToLeads", s),
         "color": "#597497",
         "visible": self._longitudinal_enabled,
       },
@@ -660,7 +669,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         self._params.put_int(key, label_to_value[dialog.selection])
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(dialog, callback=on_select)
+    gui_app.push_widget(dialog, callback=on_select)
 
   def _show_int_selector(self, key, min_v, max_v, unit=""):
     def on_close(res, val):
@@ -668,7 +677,7 @@ class StarPilotLongitudinalTuneLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotLongitudinalQOLLayout(StarPilotPanel):
@@ -773,7 +782,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         self._rebuild_grid()
 
     current = max(1, self._params.get_int(key))
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), 1, 100, 1, current, on_close, unit=" mph", color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), 1, 100, 1, current, on_close, unit=" mph", color="#597497"))
 
   def _show_int_selector(self, key, min_v, max_v, unit=""):
     def on_close(res, val):
@@ -781,7 +790,7 @@ class StarPilotLongitudinalQOLLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
@@ -858,7 +867,7 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
       secondary_options = ["None"] + [option for option in ("Dashboard", "Map Data", "Vision") if option != primary]
       selected_secondary = current_secondary if current_secondary in secondary_options else "None"
       secondary_dialog = MultiOptionDialog(tr("SLC Secondary Priority"), secondary_options, selected_secondary)
-      gui_app.set_modal_overlay(secondary_dialog, callback=lambda res: on_secondary_select(primary, secondary_dialog, res))
+      gui_app.push_widget(secondary_dialog, callback=lambda res: on_secondary_select(primary, secondary_dialog, res))
 
     primary_dialog = MultiOptionDialog(tr("SLC Primary Priority"), primary_options, current_primary)
 
@@ -872,7 +881,7 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
         return
       show_secondary_dialog(primary_dialog.selection)
 
-    gui_app.set_modal_overlay(primary_dialog, callback=on_primary_select)
+    gui_app.push_widget(primary_dialog, callback=on_primary_select)
 
   def _show_selection(self, key, options):
     current = self._params.get(key, encoding='utf-8') or "None"
@@ -883,7 +892,7 @@ class StarPilotSpeedLimitControllerLayout(StarPilotPanel):
         self._params.put(key, dialog.selection)
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(dialog, callback=on_select)
+    gui_app.push_widget(dialog, callback=on_select)
 
 
 class StarPilotSLCOffsetsLayout(StarPilotPanel):
@@ -896,12 +905,21 @@ class StarPilotSLCOffsetsLayout(StarPilotPanel):
         {
           "title": tr_noop(f"Offset {i}"),
           "type": "value",
-          "get_value": lambda k=key: f"{self._params.get_int(k)} mph",
+          "get_value": lambda k=key: f"{self._params.get_int(k)}{self._speed_unit()}",
           "on_click": lambda k=key: self._show_speed_selector(k),
           "color": "#597497",
         }
       )
     self._rebuild_grid()
+
+  def _is_metric(self):
+    return self._params.get_bool("IsMetric")
+
+  def _speed_unit(self):
+    return " km/h" if self._is_metric() else " mph"
+
+  def _speed_range(self):
+    return (-150, 150) if self._is_metric() else (-99, 99)
 
   def _show_speed_selector(self, key):
     def on_close(res, val):
@@ -909,7 +927,10 @@ class StarPilotSLCOffsetsLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), -99, 100, 1, self._params.get_int(key), on_close, unit=" mph", color="#597497"))
+    min_value, max_value = self._speed_range()
+    gui_app.push_widget(
+      AetherSliderDialog(tr(key), min_value, max_value, 1, self._params.get_int(key), on_close, unit=self._speed_unit(), color="#597497")
+    )
 
 
 class StarPilotSLCQOLLayout(StarPilotPanel):
@@ -976,7 +997,7 @@ class StarPilotSLCQOLLayout(StarPilotPanel):
         self._params.put_int(key, int(val))
         self._rebuild_grid()
 
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, 1, self._params.get_int(key), on_close, unit=unit, color="#597497"))
 
 
 class StarPilotSLCVisualsLayout(StarPilotPanel):
@@ -1044,9 +1065,9 @@ class StarPilotWeatherLayout(StarPilotPanel):
               self._params.remove("WeatherAPIKey")
               self._rebuild_grid()
 
-          gui_app.set_modal_overlay(ConfirmDialog(tr("Remove API Key?"), tr("Confirm"), on_close=on_confirm))
+          gui_app.push_widget(ConfirmDialog(tr("Remove API Key?"), tr("Confirm"), on_close=on_confirm))
 
-    gui_app.set_modal_overlay(dialog, callback=on_select)
+    gui_app.push_widget(dialog, callback=on_select)
 
 
 class StarPilotWeatherBase(StarPilotPanel):
@@ -1096,4 +1117,4 @@ class StarPilotWeatherBase(StarPilotPanel):
         self._rebuild_grid()
 
     curr = self._params.get_int(key)
-    gui_app.set_modal_overlay(AetherSliderDialog(tr(key), min_v, max_v, step, curr, on_close, unit=unit, color="#597497"))
+    gui_app.push_widget(AetherSliderDialog(tr(key), min_v, max_v, step, curr, on_close, unit=unit, color="#597497"))

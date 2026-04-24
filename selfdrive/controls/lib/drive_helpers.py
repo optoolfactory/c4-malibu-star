@@ -22,17 +22,18 @@ def smooth_value(val, prev_val, tau, dt=DT_MDL):
   alpha = 1 - np.exp(-dt/tau) if tau > 0 else 1
   return alpha * val + (1 - alpha) * prev_val
 
-def clip_curvature(v_ego, prev_curvature, new_curvature, roll) -> tuple[float, bool]:
+def clip_curvature(v_ego, prev_curvature, new_curvature, roll, jerk_factor=1.0, lat_accel_factor=1.0) -> tuple[float, bool]:
   # This function respects ISO lateral jerk and acceleration limits + a max curvature
   v_ego = max(v_ego, MIN_SPEED)
-  max_curvature_rate = MAX_LATERAL_JERK / (v_ego ** 2)  # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
+  max_curvature_rate = (MAX_LATERAL_JERK * jerk_factor) / (v_ego ** 2)  # inexact calculation, check https://github.com/commaai/openpilot/pull/24755
   new_curvature = np.clip(new_curvature,
                           prev_curvature - max_curvature_rate * DT_CTRL,
                           prev_curvature + max_curvature_rate * DT_CTRL)
 
+  effective_lat_accel = MAX_LATERAL_ACCEL_NO_ROLL * lat_accel_factor
   roll_compensation = roll * ACCELERATION_DUE_TO_GRAVITY
-  max_lat_accel = MAX_LATERAL_ACCEL_NO_ROLL + roll_compensation
-  min_lat_accel = -MAX_LATERAL_ACCEL_NO_ROLL + roll_compensation
+  max_lat_accel = effective_lat_accel + roll_compensation
+  min_lat_accel = -effective_lat_accel + roll_compensation
   new_curvature, limited_accel = clamp(new_curvature, min_lat_accel / v_ego ** 2, max_lat_accel / v_ego ** 2)
 
   new_curvature, limited_max_curv = clamp(new_curvature, -MAX_CURVATURE, MAX_CURVATURE)
@@ -55,6 +56,14 @@ def get_accel_from_plan(speeds, accels, t_idxs, action_t=DT_MDL, vEgoStopping=0.
 
 # Backward-compatible alias used by tinygrad_modeld.
 get_accel_from_plan_tomb_raider = get_accel_from_plan
+
+
+def get_lateral_active(enabled: bool, active: bool, always_on_lateral_enabled: bool,
+                       steer_fault_temporary: bool, steer_fault_permanent: bool,
+                       standstill: bool, steer_at_standstill: bool, lateral_check: bool) -> bool:
+  lateral_allowed = (enabled and active) or always_on_lateral_enabled
+  return lateral_allowed and not steer_fault_temporary and not steer_fault_permanent and \
+         (not standstill or steer_at_standstill) and lateral_check
 
 def curv_from_psis(psi_target, psi_rate, vego, action_t):
   vego = np.clip(vego, MIN_SPEED, np.inf)

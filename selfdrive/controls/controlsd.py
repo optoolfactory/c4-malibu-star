@@ -12,7 +12,7 @@ from openpilot.common.swaglog import cloudlog
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.gm.values import CAR as GM_CAR
 from opendbc.car.vehicle_model import VehicleModel
-from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
+from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lateral_active
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
@@ -35,22 +35,12 @@ LaneChangeDirection = log.LaneChangeDirection
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
-def get_gm_hud_set_speed(set_speed_ms: float, controls_enabled: bool, starpilot_toggles, starpilot_plan) -> float:
+def get_gm_hud_set_speed(set_speed_ms: float, starpilot_toggles) -> float:
   spoofed_speed = set_speed_ms
 
   set_speed_offset = float(getattr(starpilot_toggles, "set_speed_offset", 0.0) or 0.0)
   if spoofed_speed > 0 and set_speed_offset > 0:
     spoofed_speed += set_speed_offset * CV.KPH_TO_MS
-
-  if not controls_enabled or not getattr(starpilot_toggles, "speed_limit_controller", False):
-    return spoofed_speed
-
-  slc_source = str(getattr(starpilot_plan, "slcSpeedLimitSource", "") or "")
-  slc_speed_limit = float(getattr(starpilot_plan, "slcSpeedLimit", 0.0) or 0.0)
-  slc_speed_limit_offset = float(getattr(starpilot_plan, "slcSpeedLimitOffset", 0.0) or 0.0)
-
-  if slc_source != "None" and slc_speed_limit > 0:
-    return slc_speed_limit + slc_speed_limit_offset
 
   return spoofed_speed
 
@@ -141,9 +131,15 @@ class Controls:
 
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
-    CC.latActive = (self.sm['selfdriveState'].active or self.sm['starpilotCarState'].alwaysOnLateralEnabled) and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
-                   (not standstill or self.CP.steerAtStandstill) and self.sm['starpilotPlan'].lateralCheck
-    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and not self.sm['starpilotCarState'].pauseLongitudinal and self.CP.openpilotLongitudinalControl
+    CC.latActive = get_lateral_active(CC.enabled, self.sm['selfdriveState'].active,
+                                      self.sm['starpilotCarState'].alwaysOnLateralEnabled,
+                                      CS.steerFaultTemporary, CS.steerFaultPermanent,
+                                      standstill, self.CP.steerAtStandstill,
+                                      self.sm['starpilotPlan'].lateralCheck)
+    # EcuDisableFailed is set when car started in READY mode (ECU disable was rejected)
+    # Disable longitudinal so stock ACC works instead
+    ecu_disable_failed = self.params.get_bool("EcuDisableFailed")
+    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and not self.sm['starpilotCarState'].pauseLongitudinal and self.CP.openpilotLongitudinalControl and not ecu_disable_failed
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
@@ -169,7 +165,16 @@ class Controls:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
       new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
-    self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
+
+    jerk_factor = 1.0
+    lat_accel_factor = 1.0
+    if model_v2.meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing) \
+        and CS.vEgo >= self.starpilot_toggles.minimum_lane_change_speed:
+      jerk_factor = self.starpilot_toggles.lane_change_jerk_factor
+      lat_accel_factor = self.starpilot_toggles.lane_change_lat_accel_factor
+
+    self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll,
+                                                               jerk_factor, lat_accel_factor)
     lat_delay = self.sm["liveDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 
     actuators.curvature = self.desired_curvature
@@ -222,7 +227,7 @@ class Controls:
       getattr(self.starpilot_toggles, "gm_dash_spoof_offsets", False)
     )
     if gm_dash_spoof_offsets_enabled:
-      hud_set_speed = get_gm_hud_set_speed(hud_set_speed, CC.enabled, self.starpilot_toggles, self.sm['starpilotPlan'])
+      hud_set_speed = get_gm_hud_set_speed(hud_set_speed, self.starpilot_toggles)
     hudControl.setSpeed = hud_set_speed
     hudControl.speedVisible = CC.enabled
     hudControl.lanesVisible = CC.enabled

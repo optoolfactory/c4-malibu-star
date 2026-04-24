@@ -1,9 +1,10 @@
 from __future__ import annotations
+from dataclasses import dataclass
 import math
 import time
 import pyray as rl
 from collections.abc import Callable
-from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
+from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, MouseEvent
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget, DialogResult
@@ -15,7 +16,6 @@ GEOMETRY_OFFSET = 10
 PLATE_TAU = 0.060
 TILE_RADIUS = 0.25
 TILE_SEGMENTS = 10
-TILE_PADDING = 20
 SLIDER_BUTTON_SIZE = 60
 
 
@@ -41,15 +41,6 @@ def hex_to_color(hex_str: str) -> rl.Color:
   return rl.Color(int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16), 255)
 
 
-_SURFACE_MAP = {
-  "#E63956": hex_to_color("#E63956"),
-  "#3B82F6": hex_to_color("#3B82F6"),
-  "#10B981": hex_to_color("#10B981"),
-  "#D946EF": hex_to_color("#D946EF"),
-  "#8B5CF6": hex_to_color("#8B5CF6"),
-  "#64748B": hex_to_color("#64748B"),
-}
-
 _SUBSTRATE_MAP = {
   "#E63956": hex_to_color("#5A0B1A"),
   "#3B82F6": hex_to_color("#0B1C4A"),
@@ -69,7 +60,7 @@ def _resolve_value(value, default=""):
 
 
 def _with_alpha(color: rl.Color, alpha: int) -> rl.Color:
-  return rl.Color(color.r, color.g, color.b, max(0, min(255, int(alpha))))
+  return rl.Color(color.r, color.g, color.b, max(0, min(color.a, int(alpha))))
 
 
 class AetherListColors:
@@ -96,6 +87,271 @@ class AetherListColors:
   WARNING = rl.Color(204, 158, 83, 255)
   SCROLL_TRACK = rl.Color(255, 255, 255, 10)
   SCROLL_THUMB = rl.Color(255, 255, 255, 68)
+
+
+@dataclass(frozen=True)
+class AetherListMetrics:
+  max_content_width: int = 1560
+  outer_margin_x: int = 18
+  outer_margin_y: int = 24
+  panel_padding_x: int = 16
+  panel_padding_top: int = 28
+  panel_padding_bottom: int = 22
+  header_height: int = 210
+  section_gap: int = 28
+  section_header_height: int = 34
+  section_header_gap: int = 12
+  row_height: int = 122
+  utility_row_height: int = 88
+  row_radius: float = 0.12
+  action_width: int = 188
+  header_button_height: int = 58
+  header_button_gap: int = 10
+  fade_height: int = 24
+  content_right_gutter: int = 18
+  toggle_width: int = 78
+  toggle_height: int = 42
+  toggle_right_inset: int = 34
+  utility_value_right: int = 270
+  utility_value_width: int = 220
+  utility_chevron_right: int = 62
+  menu_button_font_size: int = 18
+  menu_button_roundness: float = 0.35
+  menu_button_segments: int = 12
+
+
+@dataclass(frozen=True)
+class AetherListFrame:
+  shell: rl.Rectangle
+  header: rl.Rectangle
+  scroll: rl.Rectangle
+
+
+AETHER_LIST_METRICS = AetherListMetrics()
+
+
+def build_list_panel_frame(rect: rl.Rectangle, metrics: AetherListMetrics = AETHER_LIST_METRICS) -> AetherListFrame:
+  shell_w = min(rect.width - metrics.outer_margin_x * 2, metrics.max_content_width)
+  shell_x = rect.x + (rect.width - shell_w) / 2
+  shell_y = rect.y + metrics.outer_margin_y
+  shell_h = rect.height - metrics.outer_margin_y * 2
+  shell_rect = rl.Rectangle(shell_x, shell_y, shell_w, shell_h)
+
+  header_rect = rl.Rectangle(
+    shell_x + metrics.panel_padding_x,
+    shell_y + metrics.panel_padding_top,
+    shell_w - metrics.panel_padding_x * 2,
+    metrics.header_height,
+  )
+
+  scroll_rect = rl.Rectangle(
+    shell_x + metrics.panel_padding_x,
+    header_rect.y + header_rect.height,
+    shell_w - metrics.panel_padding_x * 2,
+    shell_h - metrics.header_height - metrics.panel_padding_top - metrics.panel_padding_bottom,
+  )
+
+  return AetherListFrame(shell_rect, header_rect, scroll_rect)
+
+
+def draw_list_panel_shell(frame: AetherListFrame, *, bg: rl.Color = AetherListColors.PANEL_BG, border: rl.Color = AetherListColors.PANEL_BORDER, glow: rl.Color = AetherListColors.PANEL_GLOW):
+  rl.draw_rectangle_rounded(frame.shell, 0.055, 18, bg)
+  rl.draw_rectangle_rounded_lines_ex(frame.shell, 0.055, 18, 1, border)
+  glow_rect = rl.Rectangle(frame.shell.x + 2, frame.shell.y + 2, frame.shell.width - 4, frame.shell.height - 4)
+  rl.draw_rectangle_rounded_lines_ex(glow_rect, 0.055, 18, 1, glow)
+
+
+def draw_soft_card(rect: rl.Rectangle, fill: rl.Color, border: rl.Color, radius: float = 0.08, segments: int = 18):
+  rl.draw_rectangle_rounded(rect, radius, segments, fill)
+  rl.draw_rectangle_rounded_lines_ex(rect, radius, segments, 1, border)
+
+
+def draw_list_row_shell(
+  rect: rl.Rectangle,
+  *,
+  current: bool = False,
+  hovered: bool = False,
+  pressed: bool = False,
+  is_last: bool = False,
+  alpha: int = 255,
+  row_bg: rl.Color = AetherListColors.ROW_BG,
+  row_border: rl.Color = AetherListColors.ROW_BORDER,
+  row_separator: rl.Color = AetherListColors.ROW_SEPARATOR,
+  row_hover: rl.Color = AetherListColors.ROW_HOVER,
+  current_bg: rl.Color = AetherListColors.CURRENT_BG,
+  current_border: rl.Color = AetherListColors.CURRENT_BORDER,
+  row_radius: float = AetherListMetrics.row_radius,
+  segments: int = 18,
+  separator_inset: int = 22,
+):
+  bg = current_bg if current else row_bg
+  border = current_border if current else row_border
+  if hovered:
+    bg = rl.Color(bg.r, bg.g, bg.b, min(bg.a + row_hover.a, 255))
+  if pressed:
+    bg = rl.Color(bg.r, bg.g, bg.b, min(bg.a + 8, 255))
+
+  if bg.a > 0:
+    rl.draw_rectangle_rounded(rect, row_radius, segments, _with_alpha(bg, alpha))
+  if current and border.a > 0:
+    rl.draw_rectangle_rounded_lines_ex(rect, row_radius, segments, 1, _with_alpha(border, alpha))
+  if not is_last:
+    line_y = int(rect.y + rect.height - 1)
+    rl.draw_line(int(rect.x + separator_inset), line_y, int(rect.x + rect.width - separator_inset), line_y, _with_alpha(row_separator, alpha))
+
+
+def draw_action_rail(
+  rect: rl.Rectangle,
+  action_width: int,
+  *,
+  current: bool = False,
+  alpha: int = 255,
+  fill: rl.Color = AetherListColors.ACTION_BG,
+  current_fill: rl.Color = rl.Color(255, 255, 255, 6),
+  separator: rl.Color = AetherListColors.ACTION_SEPARATOR,
+  inset_y: int = 18,
+):
+  action_x = rect.x + rect.width - action_width
+  action_rect = rl.Rectangle(action_x, rect.y, action_width, rect.height)
+  action_fill = current_fill if current else fill
+  if action_fill.a > 0:
+    rl.draw_rectangle_rec(action_rect, _with_alpha(action_fill, alpha))
+  rl.draw_line(int(action_x), int(rect.y + inset_y), int(action_x), int(rect.y + rect.height - inset_y), _with_alpha(separator, alpha))
+  return action_rect
+
+
+def draw_list_scroll_fades(
+  scroll_rect: rl.Rectangle,
+  content_height: float,
+  scroll_offset: float,
+  bg_color: rl.Color,
+  *,
+  fade_height: int = AETHER_LIST_METRICS.fade_height,
+  right_trim: int = 12,
+  threshold: int = 4,
+):
+  if content_height <= scroll_rect.height + threshold:
+    return
+
+  fade_h = min(fade_height, int(scroll_rect.height / 4))
+  if scroll_offset < -threshold:
+    rl.draw_rectangle_gradient_v(
+      int(scroll_rect.x), int(scroll_rect.y), int(scroll_rect.width - right_trim), fade_h, _with_alpha(bg_color, 255), _with_alpha(bg_color, 0)
+    )
+
+  if (-scroll_offset + scroll_rect.height) < (content_height - threshold):
+    bottom_y = int(scroll_rect.y + scroll_rect.height - fade_h)
+    rl.draw_rectangle_gradient_v(
+      int(scroll_rect.x), bottom_y, int(scroll_rect.width - right_trim), fade_h, _with_alpha(bg_color, 0), _with_alpha(bg_color, 255)
+    )
+
+
+def draw_busy_ring(
+  center: rl.Vector2,
+  phase: float,
+  accent_color: rl.Color,
+  *,
+  track_color: rl.Color = rl.Color(255, 255, 255, 26),
+  inner_radius: float = 20,
+  outer_radius: float = 26,
+  sweep: float = 260,
+  thickness: int = 48,
+):
+  rl.draw_ring(center, inner_radius, outer_radius, 0, 360, thickness, track_color)
+  rl.draw_ring(center, inner_radius, outer_radius, phase, phase + sweep, thickness, accent_color)
+
+
+def draw_toggle_switch(
+  rect: rl.Rectangle,
+  enabled: bool,
+  *,
+  track_color: rl.Color = AetherListColors.PRIMARY,
+  off_track_color: rl.Color = rl.Color(255, 255, 255, 24),
+  knob_color: rl.Color = rl.WHITE,
+  width: int = AETHER_LIST_METRICS.toggle_width,
+  height: int = AETHER_LIST_METRICS.toggle_height,
+  right_inset: int = AETHER_LIST_METRICS.toggle_right_inset,
+  knob_offset: int = 20,
+):
+  toggle_rect = rl.Rectangle(rect.x + rect.width - width - right_inset, rect.y + (rect.height - height) / 2, width, height)
+  track = track_color if enabled else off_track_color
+  knob_x = toggle_rect.x + toggle_rect.width - knob_offset if enabled else toggle_rect.x + knob_offset
+  rl.draw_rectangle_rounded(toggle_rect, 1.0, 16, track)
+  rl.draw_circle(int(knob_x), int(toggle_rect.y + toggle_rect.height / 2), 16, knob_color)
+
+
+def draw_action_pill(
+  rect: rl.Rectangle,
+  text: str,
+  fill: rl.Color,
+  border: rl.Color,
+  text_color: rl.Color,
+  *,
+  font_size: int = AETHER_LIST_METRICS.menu_button_font_size,
+  roundness: float = AETHER_LIST_METRICS.menu_button_roundness,
+  segments: int = AETHER_LIST_METRICS.menu_button_segments,
+):
+  rl.draw_rectangle_rounded(rect, roundness, segments, fill)
+  rl.draw_rectangle_rounded_lines_ex(rect, roundness, segments, 1, border)
+  gui_label(rect, text, font_size, text_color, FontWeight.SEMI_BOLD, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+
+
+def draw_status_led(center: rl.Vector2, enabled: bool):
+  if enabled:
+    led_color = rl.Color(110, 175, 245, 255)
+    rl.draw_circle(int(center.x), int(center.y), 18, rl.Color(110, 175, 245, 18))
+    rl.draw_circle(int(center.x), int(center.y), 12, rl.Color(110, 175, 245, 48))
+    rl.draw_circle(int(center.x), int(center.y), 7, rl.Color(110, 175, 245, 100))
+    rl.draw_circle(int(center.x), int(center.y), 6, led_color)
+    rl.draw_circle(int(center.x - 2), int(center.y - 2), 2, rl.Color(210, 235, 255, 200))
+  else:
+    rl.draw_circle(int(center.x), int(center.y), 8, rl.Color(10, 10, 14, 230))
+    rl.draw_circle(int(center.x), int(center.y), 6, rl.Color(35, 40, 50, 255))
+    rl.draw_ring(center, 6, 7, 0, 360, 24, rl.Color(70, 78, 95, 140))
+
+
+def draw_overflow_dots(center: rl.Vector2, color: rl.Color):
+  dot_r = 4
+  gap = 12
+  for i in range(3):
+    rl.draw_circle(int(center.x + (i - 1) * gap), int(center.y), dot_r, color)
+
+
+def draw_trash_icon(center: rl.Vector2, color: rl.Color):
+  bin_rect = rl.Rectangle(center.x - 12, center.y - 12, 24, 24)
+  lid_rect = rl.Rectangle(center.x - 14, center.y - 18, 28, 5)
+  handle_rect = rl.Rectangle(center.x - 4, center.y - 22, 8, 4)
+  rl.draw_rectangle_rounded(bin_rect, 0.2, 8, color)
+  rl.draw_rectangle_rounded(lid_rect, 0.5, 8, color)
+  rl.draw_rectangle_rounded(handle_rect, 0.5, 8, color)
+  stripe = _with_alpha(AetherListColors.PANEL_BG, 120)
+  rl.draw_line(int(center.x - 6), int(center.y - 8), int(center.x - 6), int(center.y + 8), stripe)
+  rl.draw_line(int(center.x), int(center.y - 8), int(center.x), int(center.y + 8), stripe)
+  rl.draw_line(int(center.x + 6), int(center.y - 8), int(center.x + 6), int(center.y + 8), stripe)
+
+
+def draw_heart_icon(center: rl.Vector2, color: rl.Color):
+  rl.draw_circle(int(center.x - 5), int(center.y - 3), 7, color)
+  rl.draw_circle(int(center.x + 5), int(center.y - 3), 7, color)
+  rl.draw_triangle(
+    rl.Vector2(center.x + 13, center.y + 1),
+    rl.Vector2(center.x - 13, center.y + 1),
+    rl.Vector2(center.x, center.y + 13),
+    color,
+  )
+
+
+def draw_download_icon(center: rl.Vector2, color: rl.Color):
+  shaft_top = rl.Vector2(center.x, center.y - 18)
+  shaft_bottom = rl.Vector2(center.x, center.y + 8)
+  left_head = rl.Vector2(center.x - 11, center.y - 2)
+  right_head = rl.Vector2(center.x + 11, center.y - 2)
+  tray_left = rl.Vector2(center.x - 14, center.y + 18)
+  tray_right = rl.Vector2(center.x + 14, center.y + 18)
+  rl.draw_line_ex(shaft_top, shaft_bottom, 4, color)
+  rl.draw_line_ex(left_head, shaft_bottom, 4, color)
+  rl.draw_line_ex(right_head, shaft_bottom, 4, color)
+  rl.draw_line_ex(tray_left, tray_right, 4, color)
 
 
 class AetherButton(Widget):
@@ -222,6 +478,7 @@ class AetherTile(Widget):
     self.on_click = on_click
     self._plate_offset: float = 0.0
     self._plate_target: float = 0.0
+    self._is_pressed: bool = False
 
   @property
   def _hit_rect(self) -> rl.Rectangle:
@@ -981,7 +1238,7 @@ class RadioTileGroup(Widget):
     for i in range(len(self._option_offsets)):
       self._option_offsets[i] += (self._option_targets[i] - self._option_offsets[i]) * (1 - math.exp(-dt / PLATE_TAU))
     gap = SPACING.lg
-    option_w = 240 if len(self.options) <= 3 else 188
+    option_w = (rect.width - max(0, len(self.options) - 1) * gap) / max(1, len(self.options))
     total_width = len(self.options) * option_w + max(0, len(self.options) - 1) * gap
     if self.title:
       title_size = measure_text_cached(self._font_title, self.title, 40)
@@ -1096,3 +1353,239 @@ class TileGrid(Widget):
         tile = tiles_to_render[tile_idx]
         tile.render(rl.Rectangle(row_x + c * (row_tile_w + self._gap), rect.y + r * (tile_h + self._gap), row_tile_w, tile_h))
         tile_idx += 1
+
+class AetherContinuousSlider(Widget):
+  def __init__(self, min_val: float, max_val: float, step: float, current_val: float, on_change, title: str = "", unit: str = "", labels: dict | None = None, color: rl.Color | None = None):
+    super().__init__()
+    self.min_val = min_val
+    self.max_val = max_val
+    self.base_step = step
+    self.current_val = current_val
+    self.on_change = on_change
+    self.title = title
+    self.unit = unit
+    self.labels = labels or {}
+    self.color = color or rl.Color(54, 77, 239, 255)
+    
+    self._is_dragging = False
+    self._last_mouse_x = 0.0
+    self._smooth_value = current_val
+    self._font = gui_app.font(FontWeight.BOLD)
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if rl.check_collision_point_rec(mouse_pos, self._rect):
+      self._is_dragging = True
+      self._last_mouse_x = mouse_pos.x
+      self._update_val_from_absolute(mouse_pos.x, self.base_step)
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._is_dragging:
+      self._is_dragging = False
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if self._is_dragging:
+      dt = rl.get_frame_time()
+      dx = mouse_event.pos.x - self._last_mouse_x
+      self._last_mouse_x = mouse_event.pos.x
+      
+      velocity = abs(dx / max(dt, 0.001))
+      
+      if velocity > 1500:
+        step = self.base_step * 10
+      elif velocity > 500:
+        step = self.base_step * 5
+      else:
+        step = self.base_step
+        
+      self._update_val_from_absolute(mouse_event.pos.x, step)
+
+  def _update_val_from_absolute(self, mouse_x: float, step: float):
+    track_w = self._rect.width
+    if track_w <= 0: return
+    rel_x = max(0.0, min(1.0, (mouse_x - self._rect.x) / track_w))
+    val = self.min_val + rel_x * (self.max_val - self.min_val)
+    self._set_snapped_val(val, step)
+
+  def _set_snapped_val(self, val: float, step: float):
+    snapped = round((val - self.min_val) / step) * step + self.min_val
+    snapped = max(self.min_val, min(self.max_val, snapped))
+    if snapped != self.current_val:
+      self.current_val = snapped
+      self.on_change(self.current_val)
+
+  def _render(self, rect: rl.Rectangle):
+    self.set_rect(rect)
+    dt = rl.get_frame_time()
+    
+    self._smooth_value += (self.current_val - self._smooth_value) * (1 - math.exp(-dt / 0.060))
+    
+    rl.draw_rectangle_rounded(rect, 0.3, 16, rl.Color(35, 35, 40, 255))
+    
+    frac = max(0.0, min(1.0, (self._smooth_value - self.min_val) / (self.max_val - self.min_val)))
+    fill_w = frac * rect.width
+    if fill_w > 0:
+      fill_rect = rl.Rectangle(rect.x, rect.y, fill_w, rect.height)
+      rl.draw_rectangle_rounded(fill_rect, 0.3, 16, self.color)
+      
+      if fill_w > 16:
+        rl.draw_rectangle_rounded(rl.Rectangle(fill_rect.x, fill_rect.y, fill_rect.width - 2, fill_rect.height - 2), 0.3, 16, rl.Color(255, 255, 255, 30))
+      
+    title_y = rect.y + (rect.height - 24) / 2
+    rl.draw_text_ex(self._font, self.title, rl.Vector2(round(rect.x + 24), round(title_y)), 24, 0, rl.WHITE)
+
+    val_str = self.labels.get(self.current_val, f"{int(self.current_val)}{self.unit}")
+    ts = measure_text_cached(self._font, val_str, 24)
+    
+    text_color = rl.WHITE if frac < 0.85 else rl.Color(0, 0, 0, 180)
+    text_x = rect.x + rect.width - ts.x - 24
+    text_y = rect.y + (rect.height - ts.y) / 2
+    rl.draw_text_ex(self._font, val_str, rl.Vector2(round(text_x), round(text_y)), 24, 0, text_color)
+
+
+def draw_toggle_pill(rect: rl.Rectangle, is_on: bool, is_enabled: bool, title: str, status_str: str, hovered: bool, pressed: bool):
+  if not is_enabled:
+    bg_color = rl.Color(35, 35, 40, 150)
+  elif is_on:
+    bg_color = AetherListColors.PRIMARY
+  else:
+    bg_color = rl.Color(35, 35, 40, 255)
+    
+  rl.draw_rectangle_rounded(rect, 0.3, 16, bg_color)
+  
+  if (hovered or pressed) and is_enabled:
+    overlay = rl.Color(255, 255, 255, 14 if pressed else 8)
+    rl.draw_rectangle_rounded(rect, 0.3, 16, overlay)
+      
+  if is_on and is_enabled:
+    rl.draw_rectangle_rounded(rl.Rectangle(rect.x, rect.y, rect.width - 2, rect.height - 2), 0.3, 16, rl.Color(255, 255, 255, 30))
+      
+  font = gui_app.font(FontWeight.BOLD)
+  title_y = rect.y + (rect.height - 24) / 2
+  text_color = rl.WHITE if is_enabled else AetherListColors.MUTED
+  rl.draw_text_ex(font, title, rl.Vector2(round(rect.x + 24), round(title_y)), 24, 0, text_color)
+  
+  ts = measure_text_cached(font, status_str, 24)
+  status_x = rect.x + rect.width - ts.x - 24
+  rl.draw_text_ex(font, status_str, rl.Vector2(round(status_x), round(title_y)), 24, 0, text_color)
+
+
+class AetherVerticalSlider(Widget):
+  """Touch-first vertical slider for inline dashboard use.
+  Designed for automotive touch targets (60px+ wide tracks).
+  Renders: title above, vertical fill track, value label below."""
+
+  MIN_TRACK_WIDTH = 60  # Automotive touch minimum
+
+  def __init__(
+    self,
+    min_val: float,
+    max_val: float,
+    step: float,
+    current_val: float,
+    on_change: Callable[[float], None],
+    title: str = "",
+    unit: str = "",
+    labels: dict[float, str] | None = None,
+    color: rl.Color | None = None,
+  ):
+    super().__init__()
+    self.min_val = min_val
+    self.max_val = max_val
+    self.base_step = step
+    self.current_val = current_val
+    self.on_change = on_change
+    self.title = title
+    self.unit = unit
+    self.labels = labels or {}
+    self.color = color or AetherListColors.PRIMARY
+
+    self._is_dragging = False
+    self._last_mouse_y = 0.0
+    self._smooth_value = current_val
+    self._track_rect = rl.Rectangle(0, 0, 0, 0)
+    self._font = gui_app.font(FontWeight.BOLD)
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    if rl.check_collision_point_rec(mouse_pos, self._rect):
+      self._is_dragging = True
+      self._last_mouse_y = mouse_pos.y
+      self._update_val_from_y(mouse_pos.y, self.base_step)
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    self._is_dragging = False
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent):
+    if self._is_dragging:
+      dt = rl.get_frame_time()
+      dy = mouse_event.pos.y - self._last_mouse_y
+      self._last_mouse_y = mouse_event.pos.y
+      velocity = abs(dy / max(dt, 0.001))
+      if velocity > 1500:
+        step = self.base_step * 10
+      elif velocity > 500:
+        step = self.base_step * 5
+      else:
+        step = self.base_step
+      self._update_val_from_y(mouse_event.pos.y, step)
+
+  def _update_val_from_y(self, mouse_y: float, step: float):
+    tr_rect = self._track_rect
+    if tr_rect.height <= 0:
+      return
+    # Inverted: top = max, bottom = min
+    frac = 1.0 - max(0.0, min(1.0, (mouse_y - tr_rect.y) / tr_rect.height))
+    val = self.min_val + frac * (self.max_val - self.min_val)
+    snapped = round((val - self.min_val) / step) * step + self.min_val
+    snapped = max(self.min_val, min(self.max_val, snapped))
+    if snapped != self.current_val:
+      self.current_val = snapped
+      self.on_change(self.current_val)
+
+  def _render(self, rect: rl.Rectangle):
+    self.set_rect(rect)
+    dt = rl.get_frame_time()
+    self._smooth_value += (self.current_val - self._smooth_value) * (1 - math.exp(-dt / 0.060))
+
+    # Layout: title (20px) + gap(6) + track + gap(6) + value (20px)
+    title_h = 20
+    value_h = 20
+    gap = 6
+    track_top = rect.y + title_h + gap
+    track_h = rect.height - title_h - gap - value_h - gap
+    track_w = max(self.MIN_TRACK_WIDTH, min(rect.width * 0.7, rect.width - 16))
+    track_x = rect.x + (rect.width - track_w) / 2
+    self._track_rect = rl.Rectangle(track_x, track_top, track_w, track_h)
+
+    # Title (centered above track)
+    ts = measure_text_cached(self._font, self.title, 18)
+    tx = rect.x + (rect.width - ts.x) / 2
+    rl.draw_text_ex(self._font, self.title, rl.Vector2(round(tx), round(rect.y)), 18, 0, AetherListColors.SUBTEXT)
+
+    # Track background
+    rl.draw_rectangle_rounded(self._track_rect, 0.3, 10, rl.Color(40, 42, 50, 255))
+
+    # Fill (from bottom up)
+    frac = max(0.0, min(1.0, (self._smooth_value - self.min_val) / (self.max_val - self.min_val)))
+    fill_h = frac * track_h
+    if fill_h > 1:
+      fill_rect = rl.Rectangle(track_x, track_top + track_h - fill_h, track_w, fill_h)
+      rl.draw_rectangle_rounded(fill_rect, 0.3, 10, self.color)
+      if fill_h > 8:
+        rl.draw_rectangle_rounded(rl.Rectangle(fill_rect.x + 1, fill_rect.y + 1, fill_rect.width - 2, fill_rect.height - 2), 0.3, 10, rl.Color(255, 255, 255, 25))
+
+    # Grab indicator at fill edge
+    if 2 < fill_h < track_h - 2:
+      edge_y = track_top + track_h - fill_h
+      rl.draw_rectangle_rec(rl.Rectangle(track_x + 6, edge_y - 1, track_w - 12, 3), rl.Color(255, 255, 255, 100))
+
+    # Active glow when dragging
+    if self._is_dragging:
+      rl.draw_rectangle_rounded_lines_ex(self._track_rect, 0.3, 10, 2, self.color)
+
+    # Value label (centered below track)
+    val_str = self.labels.get(self.current_val, f"{self.current_val:.1f}{self.unit}" if isinstance(self.current_val, float) and self.base_step < 1 else f"{int(self.current_val)}{self.unit}")
+    vs = measure_text_cached(self._font, val_str, 18)
+    vx = rect.x + (rect.width - vs.x) / 2
+    vy = track_top + track_h + gap
+    rl.draw_text_ex(self._font, val_str, rl.Vector2(round(vx), round(vy)), 18, 0, rl.WHITE)
+

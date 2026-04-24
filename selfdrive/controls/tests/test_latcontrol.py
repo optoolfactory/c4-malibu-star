@@ -30,6 +30,14 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import (
   get_genesis_g90_ff_scale,
   get_genesis_g90_friction_scale,
   get_genesis_g90_friction_threshold,
+  get_ioniq_6_center_taper_scale,
+  get_ioniq_6_ff_scale,
+  get_ioniq_6_friction_scale,
+  get_ioniq_6_friction_threshold,
+  get_kia_ev6_ff_scale,
+  get_kia_ev6_friction_scale,
+  get_kia_ev6_friction_threshold,
+  get_volt_standard_center_taper_scale,
   get_volt_standard_ff_scale,
   get_volt_standard_friction_scale,
   get_volt_standard_friction_threshold,
@@ -144,8 +152,8 @@ class TestLatControl:
   def test_volt_standard_ff_scale_curve(self):
     assert get_volt_standard_ff_scale(0.0, 0.0, 20.0) == 1.0
     assert get_volt_standard_ff_scale(-0.5, 0.0, 20.0) > get_volt_standard_ff_scale(0.5, 0.0, 20.0)
-    assert get_volt_standard_ff_scale(0.6, 0.7, 8.0) < get_volt_standard_ff_scale(0.6, 0.0, 8.0)
-    assert get_volt_standard_ff_scale(-0.6, -0.7, 8.0) > get_volt_standard_ff_scale(-0.6, 0.0, 8.0)
+    assert get_volt_standard_ff_scale(0.6, 0.7, 8.0) > get_volt_standard_ff_scale(0.6, 0.0, 8.0) > get_volt_standard_ff_scale(0.6, -0.7, 8.0)
+    assert get_volt_standard_ff_scale(-0.6, -0.7, 8.0) > get_volt_standard_ff_scale(-0.6, 0.0, 8.0) > get_volt_standard_ff_scale(-0.6, 0.7, 8.0)
     assert get_volt_standard_ff_scale(2.0, 0.0, 20.0) < get_volt_standard_ff_scale(0.8, 0.0, 20.0)
 
   def test_volt_standard_friction_threshold_curve(self):
@@ -154,8 +162,8 @@ class TestLatControl:
     right_turn_in = get_volt_standard_friction_threshold(6.0, -0.7, -0.8)
     left_unwind = get_volt_standard_friction_threshold(6.0, 0.7, -0.8)
     right_unwind = get_volt_standard_friction_threshold(6.0, -0.7, 0.8)
-    assert left_turn_in > base > right_turn_in
-    assert left_unwind < base and right_unwind < base
+    assert right_turn_in < left_turn_in < base
+    assert base < left_unwind < right_unwind
 
   def test_volt_standard_friction_scale_curve(self):
     base = get_volt_standard_friction_scale(25.0, 0.7, 0.8)
@@ -163,12 +171,17 @@ class TestLatControl:
     right_turn_in = get_volt_standard_friction_scale(6.0, -0.7, -0.8)
     left_unwind = get_volt_standard_friction_scale(6.0, 0.7, -0.8)
     right_unwind = get_volt_standard_friction_scale(6.0, -0.7, 0.8)
-    assert left_turn_in < base < right_turn_in
-    assert left_unwind > base and right_unwind > base
+    assert base < left_turn_in < right_turn_in
+    assert left_unwind < base and right_unwind < left_unwind
+
+  def test_volt_standard_center_taper_curve(self):
+    assert get_volt_standard_center_taper_scale(0.0, 10.0) > get_volt_standard_center_taper_scale(0.0, 25.0)
+    assert get_volt_standard_center_taper_scale(0.0, 25.0) < get_volt_standard_center_taper_scale(0.10, 25.0) < get_volt_standard_center_taper_scale(0.20, 25.0) <= 1.0
+    assert get_volt_standard_center_taper_scale(0.0, 25.0) > 0.85
 
   def test_genesis_g90_ff_scale_curve(self):
     assert get_genesis_g90_ff_scale(0.0, 0.0, 20.0) == 1.0
-    assert get_genesis_g90_ff_scale(0.5, 0.0, 20.0) > get_genesis_g90_ff_scale(-0.5, 0.0, 20.0)
+    assert get_genesis_g90_ff_scale(-0.5, 0.0, 20.0) > get_genesis_g90_ff_scale(0.5, 0.0, 20.0)
     assert get_genesis_g90_ff_scale(0.6, 0.7, 8.0) > get_genesis_g90_ff_scale(0.6, 0.0, 8.0) > get_genesis_g90_ff_scale(0.6, -0.7, 8.0)
     assert get_genesis_g90_ff_scale(-0.6, -0.7, 8.0) > get_genesis_g90_ff_scale(-0.6, 0.0, 8.0) > get_genesis_g90_ff_scale(-0.6, 0.7, 8.0)
     assert get_genesis_g90_ff_scale(2.0, 0.0, 20.0) < get_genesis_g90_ff_scale(0.8, 0.0, 20.0)
@@ -192,6 +205,61 @@ class TestLatControl:
     right_unwind = get_genesis_g90_friction_scale(6.0, -0.7, 0.8)
     assert right_turn_in > left_turn_in > base
     assert base > left_unwind > right_unwind
+
+  def test_ioniq_6_ff_scale_curve(self):
+    assert get_ioniq_6_ff_scale(0.0, 0.0, 20.0) == 1.0
+    assert get_ioniq_6_ff_scale(0.4, 0.0, 20.0) > get_ioniq_6_ff_scale(-0.4, 0.0, 20.0)
+    assert get_ioniq_6_ff_scale(0.4, 0.7, 8.0) > get_ioniq_6_ff_scale(0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(0.4, -0.7, 8.0)
+    assert get_ioniq_6_ff_scale(-0.4, -0.7, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.0, 8.0) > get_ioniq_6_ff_scale(-0.4, 0.7, 8.0)
+    assert get_ioniq_6_ff_scale(1.2, 0.0, 20.0) < get_ioniq_6_ff_scale(0.4, 0.0, 20.0)
+
+  def test_ioniq_6_friction_threshold_curve(self):
+    base = get_friction_threshold(6.0)
+    left_turn_in = get_ioniq_6_friction_threshold(6.0, 0.5, 0.8)
+    right_turn_in = get_ioniq_6_friction_threshold(6.0, -0.5, -0.8)
+    left_unwind = get_ioniq_6_friction_threshold(6.0, 0.5, -0.8)
+    right_unwind = get_ioniq_6_friction_threshold(6.0, -0.5, 0.8)
+    assert max(left_turn_in, right_turn_in) < base
+    assert left_unwind >= base
+    assert right_unwind >= base
+
+  def test_ioniq_6_friction_scale_curve(self):
+    base = get_ioniq_6_friction_scale(25.0, 0.5, 0.8)
+    left_turn_in = get_ioniq_6_friction_scale(6.0, 0.5, 0.8)
+    right_turn_in = get_ioniq_6_friction_scale(6.0, -0.5, -0.8)
+    left_unwind = get_ioniq_6_friction_scale(6.0, 0.5, -0.8)
+    right_unwind = get_ioniq_6_friction_scale(6.0, -0.5, 0.8)
+    assert left_turn_in > right_turn_in > base
+    assert base > left_unwind > right_unwind
+
+  def test_ioniq_6_center_taper_curve(self):
+    assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.0, 10.0)
+    assert get_ioniq_6_center_taper_scale(0.0, 30.0) < get_ioniq_6_center_taper_scale(0.2, 30.0)
+    assert abs(get_ioniq_6_center_taper_scale(0.2, 30.0) - 1.0) < 1e-3
+
+  def test_kia_ev6_ff_scale_curve(self):
+    assert get_kia_ev6_ff_scale(0.0, 0.0, 20.0) == 1.0
+    assert get_kia_ev6_ff_scale(-0.3, 0.0, 20.0) > get_kia_ev6_ff_scale(0.3, 0.0, 20.0)
+    assert get_kia_ev6_ff_scale(-0.4, -0.7, 8.0) > get_kia_ev6_ff_scale(-0.4, 0.0, 8.0) > get_kia_ev6_ff_scale(-0.4, 0.7, 8.0)
+    assert get_kia_ev6_ff_scale(0.4, 0.7, 8.0) > get_kia_ev6_ff_scale(0.4, 0.0, 8.0) > get_kia_ev6_ff_scale(0.4, -0.7, 8.0)
+    assert get_kia_ev6_ff_scale(1.2, 0.0, 20.0) < get_kia_ev6_ff_scale(0.4, 0.0, 20.0)
+
+  def test_kia_ev6_friction_threshold_curve(self):
+    base = get_friction_threshold(6.0)
+    left_turn_in = get_kia_ev6_friction_threshold(6.0, 0.5, 0.8)
+    right_turn_in = get_kia_ev6_friction_threshold(6.0, -0.5, -0.8)
+    left_unwind = get_kia_ev6_friction_threshold(6.0, 0.5, -0.8)
+    right_unwind = get_kia_ev6_friction_threshold(6.0, -0.5, 0.8)
+    assert right_turn_in < left_turn_in < base < left_unwind < right_unwind
+
+  def test_kia_ev6_friction_scale_curve(self):
+    base = get_kia_ev6_friction_scale(25.0, 0.5, 0.8)
+    left_turn_in = get_kia_ev6_friction_scale(6.0, 0.5, 0.8)
+    right_turn_in = get_kia_ev6_friction_scale(6.0, -0.5, -0.8)
+    left_unwind = get_kia_ev6_friction_scale(6.0, 0.5, -0.8)
+    right_unwind = get_kia_ev6_friction_scale(6.0, -0.5, 0.8)
+    assert right_turn_in > left_turn_in > base
+    assert base > left_unwind >= right_unwind
 
   def test_volt_plexy_friction_threshold_curve(self):
     base = get_friction_threshold(6.0)
@@ -242,6 +310,22 @@ class TestLatControl:
   def test_genesis_g90_testing_ground_update_path(self, monkeypatch):
     controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.GENESIS_G90)
     monkeypatch.setattr(latcontrol_torque, "genesis_g90_lateral_testing_ground_active", lambda: True)
+
+    _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
+
+    assert lac_log.active
+
+  def test_ioniq_6_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.HYUNDAI_IONIQ_6)
+    monkeypatch.setattr(latcontrol_torque, "ioniq_6_lateral_testing_ground_active", lambda: True)
+
+    _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
+
+    assert lac_log.active
+
+  def test_kia_ev6_testing_ground_update_path(self, monkeypatch):
+    controller, VM, CS, params, starpilot_toggles = self._build_torque_controller(HYUNDAI.KIA_EV6)
+    monkeypatch.setattr(latcontrol_torque, "kia_ev6_lateral_testing_ground_active", lambda: True)
 
     _, _, lac_log = controller.update(True, CS, VM, params, False, 0.0025, False, 0.2, None, None, starpilot_toggles)
 

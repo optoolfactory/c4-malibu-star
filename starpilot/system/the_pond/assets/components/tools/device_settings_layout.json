@@ -174,6 +174,17 @@
         "parent_key": "LaneChanges"
       },
       {
+        "key": "LaneChangeSmoothing",
+        "label": "Lane Change Smoothing",
+        "description": "Controls how smoothly openpilot commits to a lane change. 10 is stock behavior; lower values produce a gentler, more gradual maneuver. 1 stretches the maneuver to ~8 seconds.",
+        "data_type": "int",
+        "ui_type": "numeric",
+        "min": 1.0,
+        "max": 10.0,
+        "step": 1.0,
+        "parent_key": "LaneChanges"
+      },
+      {
         "key": "LateralTune",
         "label": "Lateral Tuning",
         "description": "Miscellaneous steering control changes to fine-tune how openpilot drives.",
@@ -968,6 +979,14 @@
         "parent_key": "LongitudinalTune"
       },
       {
+        "key": "CoastUpToLeads",
+        "label": "Coast Up To Leads",
+        "description": "Allow openpilot to briefly coast toward far leads before resuming normal throttle. Disable this if your vehicle shows gas/brake alternation while approaching distant traffic.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "LongitudinalTune"
+      },
+      {
         "key": "HumanLaneChanges",
         "label": "Human-Like Lane Changes",
         "description": "Lane-change behavior that mimics human drivers by anticipating and tracking adjacent vehicles during lane changes.",
@@ -1079,7 +1098,16 @@
         "description": "Automatically adjust driving behavior based on real-time weather. Helps maintain comfort and safety in low visibility, rain, or snow.",
         "data_type": "bool",
         "ui_type": "toggle",
+        "is_parent_toggle": true,
         "parent_key": "QOLLongitudinal"
+      },
+      {
+        "key": "LowVisibilityOffsets",
+        "label": "Low Visibility (fog)",
+        "description": "Customise settings for driving in low visibility situations",
+        "ui_type": "group",
+        "is_parent_toggle": true,
+        "parent_key": "WeatherPresets"
       },
       {
         "key": "IncreaseFollowingLowVisibility",
@@ -1089,7 +1117,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 3.0,
-        "step": 0.01
+        "step": 0.01,
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceLowVisibility",
@@ -1098,7 +1127,8 @@
         "data_type": "float",
         "ui_type": "numeric",
         "min": 0.0,
-        "max": 10.0
+        "max": 10.0,
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "ReduceAccelerationLowVisibility",
@@ -1108,7 +1138,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "LowVisibilityOffsets"
       },
       {
         "key": "ReduceLateralAccelerationLowVisibility",
@@ -1118,7 +1149,16 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "LowVisibilityOffsets"
+      },
+      {
+        "key": "RainOffsets",
+        "label": "Light/Medium Rain",
+        "description": "Customise settings for driving in light & medium rain",
+        "ui_type": "group",
+        "is_parent_toggle": true,
+        "parent_key": "WeatherPresets"
       },
       {
         "key": "IncreaseFollowingRain",
@@ -1128,7 +1168,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 3.0,
-        "step": 0.01
+        "step": 0.01,
+        "parent_key": "RainOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceRain",
@@ -1137,7 +1178,8 @@
         "data_type": "float",
         "ui_type": "numeric",
         "min": 0.0,
-        "max": 10.0
+        "max": 10.0,
+        "parent_key": "RainOffsets"
       },
       {
         "key": "ReduceAccelerationRain",
@@ -1147,7 +1189,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "RainOffsets"
       },
       {
         "key": "ReduceLateralAccelerationRain",
@@ -1157,7 +1200,16 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "RainOffsets"
+      },
+      {
+        "key": "RainStormOffsets",
+        "label": "Heavy Rain",
+        "description": "Customise settings for driving in heavy rain",
+        "ui_type": "group",
+        "is_parent_toggle": true,
+        "parent_key": "WeatherPresets"
       },
       {
         "key": "IncreaseFollowingRainStorm",
@@ -1167,7 +1219,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 3.0,
-        "step": 0.01
+        "step": 0.01,
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceRainStorm",
@@ -1176,7 +1229,8 @@
         "data_type": "float",
         "ui_type": "numeric",
         "min": 0.0,
-        "max": 10.0
+        "max": 10.0,
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "ReduceAccelerationRainStorm",
@@ -1186,7 +1240,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "RainStormOffsets"
       },
       {
         "key": "ReduceLateralAccelerationRainStorm",
@@ -1196,7 +1251,16 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "RainStormOffsets"
+      },
+      {
+        "key": "SnowOffsets",
+        "label": "Snow",
+        "description": "Customise settings for driving in snow",
+        "ui_type": "group",
+        "is_parent_toggle": true,
+        "parent_key": "WeatherPresets"
       },
       {
         "key": "IncreaseFollowingSnow",
@@ -1206,7 +1270,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 3.0,
-        "step": 0.01
+        "step": 0.01,
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "IncreasedStoppedDistanceSnow",
@@ -1215,7 +1280,8 @@
         "data_type": "float",
         "ui_type": "numeric",
         "min": 0.0,
-        "max": 10.0
+        "max": 10.0,
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "ReduceAccelerationSnow",
@@ -1225,7 +1291,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "ReduceLateralAccelerationSnow",
@@ -1235,7 +1302,8 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 99.0,
-        "step": 1.0
+        "step": 1.0,
+        "parent_key": "SnowOffsets"
       },
       {
         "key": "SpeedLimitController",
@@ -1250,7 +1318,9 @@
         "label": "Vision Speed Limit Detection",
         "description": "Use the road camera to detect speed limit signs for SLC and speed limit filling.",
         "data_type": "bool",
-        "ui_type": "toggle"
+        "ui_type": "toggle",
+        "is_parent_toggle": true,
+        "parent_key": "SpeedLimitController"
       },
       {
         "key": "VisionSpeedLimitAutoBookmark",
@@ -1309,6 +1379,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 30.0,
+        "step": 0.1,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1319,6 +1390,7 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 30.0,
+        "step": 0.1,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1445,6 +1517,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1455,6 +1528,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1465,6 +1539,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1475,6 +1550,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1485,6 +1561,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1495,6 +1572,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1505,6 +1583,7 @@
         "ui_type": "numeric",
         "min": -99.0,
         "max": 99.0,
+        "step": 1.0,
         "parent_key": "SpeedLimitController"
       },
       {
@@ -1609,6 +1688,14 @@
         "parent_key": "CustomUI"
       },
       {
+        "key": "RainbowPath",
+        "label": "Rainbow Road",
+        "description": "Color the driving path like a rainbow road.\n\nOn the Python UIs this overrides acceleration and braking path coloring.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "CustomUI"
+      },
+      {
         "key": "AdjacentPath",
         "label": "Adjacent Lanes",
         "description": "Show the driving paths for the left and right lanes.",
@@ -1683,6 +1770,26 @@
         "parent_key": "ModelUI"
       },
       {
+        "key": "LaneLinesColor",
+        "label": "Lane Line Color",
+        "description": "Set a custom lane-line color for the Python UIs.\n\nUse Stock to follow the default line color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#00FF00",
+        "parent_key": "ModelUI"
+      },
+      {
+        "key": "BorderWidth",
+        "label": "Border Width",
+        "description": "Scale the driving-screen border thickness.\n\n100% matches the stock border width.",
+        "data_type": "float",
+        "ui_type": "numeric",
+        "min": 25.0,
+        "max": 250.0,
+        "step": 5.0,
+        "parent_key": "ModelUI"
+      },
+      {
         "key": "PathEdgeWidth",
         "label": "Path Edges Width",
         "description": "Set the driving-path edge width that represents different driving modes and statuses.\n\nDefault is 20% of the total path width.\n\nColor Guide:\n\n- Light Blue: Always On Lateral\n- Green: Default\n- Orange: Experimental Mode\n- Red: Traffic Mode\n- Yellow: Conditional Experimental Mode overridden",
@@ -1690,6 +1797,15 @@
         "ui_type": "numeric",
         "min": 0.0,
         "max": 100.0,
+        "parent_key": "ModelUI"
+      },
+      {
+        "key": "PathEdgesColor",
+        "label": "Path Edge Color",
+        "description": "Set a custom path-edge color for the Python UIs.\n\nUse Stock to follow the default line color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#00FF00",
         "parent_key": "ModelUI"
       },
       {
@@ -1701,6 +1817,15 @@
         "min": 0.0,
         "max": 10.0,
         "step": 0.1,
+        "parent_key": "ModelUI"
+      },
+      {
+        "key": "PathColor",
+        "label": "Path Color",
+        "description": "Set a custom filled-path color for the Python UIs.\n\nUse Stock to follow the default path color behavior.",
+        "data_type": "string",
+        "ui_type": "color",
+        "default_color": "#30FF9C",
         "parent_key": "ModelUI"
       },
       {
@@ -2010,6 +2135,13 @@
         "ui_type": "toggle"
       },
       {
+        "key": "DisableOpenpilotLongitudinal",
+        "label": "Disable openpilot Longitudinal",
+        "description": "Use the vehicle's stock longitudinal control instead of openpilot longitudinal control. This can stop openpilot from sending cruise-control acceleration and braking commands on supported vehicles.",
+        "data_type": "bool",
+        "ui_type": "toggle"
+      },
+      {
         "key": "GMPedalLongitudinal",
         "label": "Use Pedal For Longitudinal",
         "description": "Use the pedal interceptor for full longitudinal control on supported GM vehicles.",
@@ -2019,7 +2151,7 @@
       {
         "key": "GMDashSpoofOffsets",
         "label": "Apply Offsets To Dash Spoof",
-        "description": "On GM pedal-long cars, add the active global set-speed offset or SLC offset to the spoofed dash set speed.",
+        "description": "On GM pedal-long cars, add the configured set-speed offset to the spoofed dash set speed so it matches the on-screen set speed.",
         "data_type": "bool",
         "ui_type": "toggle"
       },
@@ -2126,6 +2258,10 @@
           {
             "value": 7,
             "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
           }
         ]
       },
@@ -2167,6 +2303,10 @@
           {
             "value": 7,
             "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
           }
         ]
       },
@@ -2208,6 +2348,10 @@
           {
             "value": 7,
             "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
           }
         ]
       },
@@ -2249,6 +2393,280 @@
           {
             "value": 7,
             "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "ModeButtonControl",
+        "label": "Mode Button (Short Press)",
+        "description": "Action performed when the \"Mode\" button is pressed. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "LongModeButtonControl",
+        "label": "Mode Button (Long Press)",
+        "description": "Action performed when the \"Mode\" button is pressed for more than 0.5 seconds. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "VeryLongModeButtonControl",
+        "label": "Mode Button (Extra Long Press)",
+        "description": "Action performed when the \"Mode\" button is pressed for more than 2.5 seconds. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "StarButtonControl",
+        "label": "Star Button (Short Press)",
+        "description": "Action performed when the \"Star\" button is pressed. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "LongStarButtonControl",
+        "label": "Star Button (Long Press)",
+        "description": "Action performed when the \"Star\" button is pressed for more than 0.5 seconds. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
+          }
+        ]
+      },
+      {
+        "key": "VeryLongStarButtonControl",
+        "label": "Star Button (Extra Long Press)",
+        "description": "Action performed when the \"Star\" button is pressed for more than 2.5 seconds. Hyundai CAN-FD only.",
+        "data_type": "int",
+        "ui_type": "dropdown",
+        "options": [
+          {
+            "value": 0,
+            "label": "No Action"
+          },
+          {
+            "value": 1,
+            "label": "Change Personality"
+          },
+          {
+            "value": 2,
+            "label": "Force Coast"
+          },
+          {
+            "value": 3,
+            "label": "Pause Steering"
+          },
+          {
+            "value": 4,
+            "label": "Pause Accel/Brake"
+          },
+          {
+            "value": 5,
+            "label": "Toggle Experimental"
+          },
+          {
+            "value": 6,
+            "label": "Toggle Traffic"
+          },
+          {
+            "value": 7,
+            "label": "Toggle Switchback"
+          },
+          {
+            "value": 8,
+            "label": "Create Bookmark"
           }
         ]
       }

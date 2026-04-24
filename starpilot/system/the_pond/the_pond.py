@@ -3638,6 +3638,7 @@ def setup(app):
         "drivingmodelversion": "DrivingModelVersion",
       }.get(key.lower(), key)
       val = data["value"]
+      selected_label_input = str(data.get("label") or "").strip()
 
       # Python json parses true/false as boolean
       if isinstance(val, bool):
@@ -3650,12 +3651,13 @@ def setup(app):
         return jsonify({"error": f"Parameter '{key}' is not editable."}), 403
 
       # 1. Prevent changing the model or reboot-required toggles while the car is actively driving
-      reboot_keys = {"Model", "DrivingModel", "AlwaysOnLateral", "ForceTorqueController", "NNFF", "NNFFLite"}
+      reboot_keys = {"Model", "DrivingModel", "AlwaysOnLateral", "DisableOpenpilotLongitudinal", "ForceTorqueController", "NNFF", "NNFFLite"}
       if key in reboot_keys and params.get_bool("IsOnroad"):
         friendly_names = {
           "Model": "Driving Model",
           "DrivingModel": "Driving Model",
           "AlwaysOnLateral": "Always On Lateral",
+          "DisableOpenpilotLongitudinal": "Disable openpilot Longitudinal",
           "ForceTorqueController": "Force Torque Controller",
           "NNFF": "NNFF",
           "NNFFLite": "NNFF-Lite"
@@ -3730,7 +3732,13 @@ def setup(app):
           return jsonify({"error": "Car model cannot be empty."}), 400
 
         catalog = _get_fingerprint_catalog()
-        model_label = catalog["model_to_label"].get(selected_model)
+        if selected_label_input and any(
+          entry["value"] == selected_model and entry["label"] == selected_label_input
+          for entry in catalog["all_models"]
+        ):
+          model_label = selected_label_input
+        else:
+          model_label = catalog["model_to_label"].get(selected_model)
         make_label = catalog["model_to_make"].get(selected_model)
 
         params.put("CarModel", selected_model)
