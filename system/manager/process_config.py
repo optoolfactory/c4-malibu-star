@@ -167,7 +167,7 @@ class BigDeviceUIProcess:
 procs = [
   DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
 
-  NativeProcess("loggerd", "system/loggerd", ["./loggerd"], and_(allow_logging, logging)),
+  #NativeProcess("loggerd", "system/loggerd", ["./loggerd"], and_(allow_logging, logging)),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], and_(allow_logging, only_onroad)),
   NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], notcar),
   PythonProcess("logmessaged", "system.logmessaged", always_run),
